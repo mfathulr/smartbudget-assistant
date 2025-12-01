@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil - Financial Advisor</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Professional Profile Page Redesign */
+        .profile-container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            display: grid;
+            gap: 1.5rem;
+        }
+        
+        /* Profile Header Card */
+        .profile-header-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            color: white;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        .profile-header-card::before {
+            content: '';
+            position: absolute;
+            top: -50%; right: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .profile-header-content {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 2rem;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Avatar Section */
+        .avatar-section {
+            position: relative;
+        }
+        .avatar-display {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: 700;
+            color: #667eea;
+            border: 4px solid rgba(255,255,255,0.3);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .avatar-display:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 28px rgba(0,0,0,0.25);
+        }
+        .avatar-display img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .avatar-upload-btn {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 36px;
+            height: 36px;
+            background: #2563eb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            transition: all 0.2s ease;
+        }
+        .avatar-upload-btn:hover {
+            background: #1e40af;
+            transform: scale(1.1);
+        }
+        .avatar-upload-btn i {
+            color: white;
+            font-size: 14px;
+        }
+        #avatar-input {
+            display: none;
+        }
+        
+        /* Profile Info */
+        .profile-info {
+            flex: 1;
+        }
+        .profile-name {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0 0 0.5rem 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .profile-email {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 0.75rem;
+        }
+        .profile-role {
+            display: inline-block;
+            padding: 6px 16px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin: 0.25rem 0;
+        }
+        .stat-label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+        
+        /* Form Cards */
+        .form-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .form-card h2 {
+            font-size: 1.25rem;
+            margin: 0 0 1.25rem 0;
+            color: #1f2937;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .form-card h2 i {
+            color: #667eea;
+        }
+        
+        /* Enhanced Form Styling */
+        .input-group {
+            position: relative;
+            margin-bottom: 1.25rem;
+        }
+        .input-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+        .input-with-icon {
+            position: relative;
+        }
+        .input-with-icon i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+            font-size: 16px;
+        }
+        .input-with-icon input,
+        .input-with-icon textarea {
+            width: 100%;
+            padding: 12px 12px 12px 40px;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        .input-with-icon input:focus,
+        .input-with-icon textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .input-with-icon input:disabled {
+            background: #f9fafb;
+            cursor: not-allowed;
+        }
+        
+        /* Button Styling */
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* Message Animations */
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .message.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .profile-header-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            .avatar-section {
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>
+            <a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px;">
+                <i class="fas fa-wallet"></i>
+                <span data-i18n="appTitle">Financial Assistant</span>
+            </a>
+        </h1>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <div class="lang-switcher">
+                <button id="lang-id" class="lang-button">ID</button>
+                <button id="lang-en" class="lang-button">EN</button>
+            </div>
+            <nav id="user-menu-container">
+                <!-- User menu will be rendered here by app.js -->
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="profile-container">
+            
+            <!-- Profile Header Card -->
+            <div class="profile-header-card">
+                <div class="profile-header-content">
+                    <div class="avatar-section">
+                        <div class="avatar-display" id="avatar-display" onclick="document.getElementById('avatar-input').click()">
+                            <span id="avatar-initial">U</span>
+                        </div>
+                        <label class="avatar-upload-btn" for="avatar-input">
+                            <i class="fas fa-camera"></i>
+                        </label>
+                        <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/webp">
+                    </div>
+                    
+                    <div class="profile-info">
+                        <h1 class="profile-name" id="user-name-display">Memuat...</h1>
+                        <p class="profile-email" id="user-email-display">Memuat...</p>
+                        <span class="profile-role" id="user-role-display" style="display: none;"></span>
+                        
+                        <!-- Stats Mini -->
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">💰 Total Saldo</div>
+                                <div class="stat-value" id="stat-balance">Rp 0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">📊 Transaksi</div>
+                                <div class="stat-value" id="stat-transactions">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">🎯 Target Tabungan</div>
+                                <div class="stat-value" id="stat-goals">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Profile Information Form Card -->
+            <div class="form-card">
+                <h2><i class="fas fa-user-circle"></i> <span data-i18n="profileTitle">Informasi Profil</span></h2>
+                <div id="profile-message" class="message"></div>
+                <form id="profile-form">
+                    <div class="input-group">
+                        <label for="profile-name" data-i18n="profileName">Nama</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="profile-name" required>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="profile-email" data-i18n="profileEmail">Email</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="profile-email" disabled title="Email tidak dapat diubah">
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="profile-phone" data-i18n="profilePhone">Nomor Telepon</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-phone"></i>
+                            <input type="tel" id="profile-phone" placeholder="cth: 08123456789">
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="profile-bio" data-i18n="profileBio">Bio Singkat</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-comment-dots"></i>
+                            <textarea id="profile-bio" rows="3" placeholder="Ceritakan sedikit tentang diri Anda..."></textarea>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span data-i18n="saveInfo">Simpan Informasi</span>
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Change Password Form Card -->
+            <div class="form-card">
+                <h2><i class="fas fa-shield-alt"></i> <span data-i18n="changePasswordTitle">Ubah Password</span></h2>
+                <div id="password-message" class="message"></div>
+                <form id="password-form">
+                    <div class="input-group">
+                        <label for="current-password" data-i18n="currentPassword">Password Saat Ini</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="current-password" required>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="new-password" data-i18n="newPassword">Password Baru</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-key"></i>
+                            <input type="password" id="new-password" required minlength="6">
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="confirm-password" data-i18n="confirmPassword">Konfirmasi Password Baru</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-check-circle"></i>
+                            <input type="password" id="confirm-password" required>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-shield-alt"></i>
+                        <span data-i18n="savePassword">Simpan Password</span>
+                    </button>
+                </form>
+            </div>
+            
+        </div>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+    <script src="/static/profile.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Financial Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>
+        <i class="fas fa-wallet"></i>
+        <span data-i18n="appTitle">Financial Assistant</span>
+      </h1>
+      <div style="display: flex; gap: 16px; align-items: center;">
+        <div class="lang-switcher">
+          <button id="lang-id" class="lang-button">ID</button>
+          <button id="lang-en" class="lang-button">EN</button>
+        </div>
+        <div id="user-menu-container"></div>
+      </div>
+    </header>
+    <main>
+      <!-- QUICK STATS: ALWAYS VISIBLE -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; margin-top: 8px;">
+        <div class="quick-stat-card balance-card">
+          <div class="quick-stat-icon balance-icon">
+            <i class="fas fa-wallet"></i>
+          </div>
+          <div class="quick-stat-content">
+            <div class="quick-stat-label" data-i18n="totalBalanceLabel">💰 Total Balance</div>
+            <div class="quick-stat-value" id="balance-amount">Rp 0</div>
+            <div class="quick-stat-filter">
+              <label data-i18n="accountFilterLabel">Akun:</label>
+              <select id="account-filter">
+                <option value="" data-i18n="allAccountsOption">Semua Akun</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-stat-card savings-card">
+          <div class="quick-stat-icon savings-icon">
+            <i class="fas fa-chart-line"></i>
+          </div>
+          <div class="quick-stat-content">
+            <div class="quick-stat-label" data-i18n="savingsGoalsLabel">🎯 Savings Goals</div>
+            <div class="quick-stat-value" id="savings-count">0 goals</div>
+            <div class="quick-stat-subtitle" id="savings-total" data-i18n-prefix="collectedLabel">Terkumpul: Rp 0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB NAVIGATION -->
+      <div class="tabs-container">
+        <button class="tab-button active" onclick="switchTab('dashboard')" data-i18n="summaryTab"><i class="fas fa-chart-pie"></i> Summary</button>
+        <button class="tab-button" onclick="switchTab('transactions')" data-i18n="transactionsTab"><i class="fas fa-receipt"></i> Transaksi</button>
+        <button class="tab-button" onclick="switchTab('savings')" data-i18n="savingsTab"><i class="fas fa-bullseye"></i> Tabungan</button>
+        <button class="tab-button" onclick="switchTab('advisor')" data-i18n="advisorTab"><i class="fas fa-brain"></i> Advisor</button>
+      </div>
+
+      <!-- TAB: DASHBOARD (Summary) -->
+      <div id="dashboard" class="tab-content active">
+        <!-- Income vs Expense Overview -->
+        <div class="summary-overview">
+          <div class="summary-stat-card income-stat">
+            <div class="summary-stat-icon">
+              <i class="fas fa-arrow-up"></i>
+            </div>
+            <div class="summary-stat-content">
+              <div class="summary-stat-label" data-i18n="incomeLabel">Pemasukan</div>
+              <div class="summary-stat-value" id="sum-income">Rp 0</div>
+              <div class="summary-stat-trend positive">
+                <i class="fas fa-arrow-up"></i>
+                <span data-i18n="thisMonthLabel">Bulan ini</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-stat-card expense-stat">
+            <div class="summary-stat-icon">
+              <i class="fas fa-arrow-down"></i>
+            </div>
+            <div class="summary-stat-content">
+              <div class="summary-stat-label" data-i18n="expenseLabel">Pengeluaran</div>
+              <div class="summary-stat-value" id="sum-expense">Rp 0</div>
+              <div class="summary-stat-trend negative">
+                <i class="fas fa-arrow-down"></i>
+                <span data-i18n="thisMonthLabel">Bulan ini</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-stat-card balance-stat">
+            <div class="summary-stat-icon">
+              <i class="fas fa-balance-scale"></i>
+            </div>
+            <div class="summary-stat-content">
+              <div class="summary-stat-label" data-i18n="netBalanceLabel">Saldo Bersih</div>
+              <div class="summary-stat-value" id="sum-net">Rp 0</div>
+              <div class="summary-stat-trend neutral">
+                <i class="fas fa-minus"></i>
+                <span data-i18n="differenceLabel">Selisih</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-grid">
+          <div class="card chart-card">
+            <div class="chart-header">
+              <h3 data-i18n="expenseByCategoryTitle"><i class="fas fa-chart-pie"></i> Pengeluaran Per Kategori</h3>
+              <div class="chart-legend" id="expense-legend"></div>
+            </div>
+            <div class="chart-container">
+              <canvas id="expense-category-chart"></canvas>
+            </div>
+            <div class="chart-empty" id="expense-chart-empty" style="display: none;">
+              <i class="fas fa-chart-pie"></i>
+              <p data-i18n="noExpenseData">Belum ada data pengeluaran</p>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="chart-header">
+              <h3 data-i18n="accountBalanceTitle"><i class="fas fa-wallet"></i> Distribusi Saldo Akun</h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="account-balance-chart"></canvas>
+            </div>
+            <div class="chart-empty" id="account-chart-empty" style="display: none;">
+              <i class="fas fa-wallet"></i>
+              <p data-i18n="noAccountData">Belum ada data akun</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category Breakdown Table -->
+        <div class="card">
+          <h3 data-i18n="categoryBreakdownTitle"><i class="fas fa-list-alt"></i> Rincian Per Kategori</h3>
+          <div class="category-toggle-buttons">
+            <button class="toggle-btn active" onclick="toggleCategoryView('all')" data-i18n="allCategories">Semua</button>
+            <button class="toggle-btn" onclick="toggleCategoryView('expense')" data-i18n="expenseOnly">Pengeluaran</button>
+            <button class="toggle-btn" onclick="toggleCategoryView('income')" data-i18n="incomeOnly">Pemasukan</button>
+          </div>
+          <div class="table-container">
+            <table id="summary-table" class="modern-table">
+              <thead>
+                <tr>
+                  <th data-i18n="categoryColumn">Kategori</th>
+                  <th style="text-align: right;" data-i18n="incomeColumn">Pemasukan</th>
+                  <th style="text-align: right;" data-i18n="expenseColumn">Pengeluaran</th>
+                  <th style="text-align: right;" data-i18n="percentageColumn">Persentase</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Account Balances -->
+        <div class="card">
+          <h3 data-i18n="accountBalancesTitle"><i class="fas fa-university"></i> Saldo Per Akun</h3>
+          <div class="accounts-grid" id="accounts-grid"></div>
+        </div>
+      </div>
+
+      <!-- TAB: TRANSACTIONS -->
+      <div id="transactions" class="tab-content">
+        <div class="card">
+          <div class="sub-tabs">
+            <button class="sub-tab-button active" onclick="switchSubTab('add-tx')" data-i18n="addTransactionSubTab">Tambah Transaksi</button>
+            <button class="sub-tab-button" onclick="switchSubTab('transfer-tx')" data-i18n="fundTransferSubTab">Pemindahan Dana</button>
+            <button class="sub-tab-button" onclick="switchSubTab('history-tx')" data-i18n="historySubTab">Riwayat Transaksi</button>
+          </div>
+
+          <div id="add-tx" class="sub-tab-content active">
+            <div class="card" style="box-shadow:none; border:1.5px solid #e5e7eb;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 data-i18n="addTransactionTitle" style="margin:0;">
+                  <i class="fas fa-plus-circle"></i> Tambah Transaksi
+                </h2>
+                <div class="small" style="color:#6b7280;">
+                  <i class="fas fa-lightbulb"></i>
+                  <span data-i18n="txHint">Tips: pilih tipe dulu, kategori menyesuaikan.</span>
+                </div>
+              </div>
+
+              <form id="tx-form" style="margin-top:12px;">
+                <div class="row">
+                  <div>
+                    <label for="date" data-i18n="dateLabel">Tanggal</label>
+                    <input type="date" id="date" name="date" />
+                  </div>
+                  <div>
+                    <label for="type" data-i18n="typeLabel">Tipe</label>
+                    <select id="type" name="type">
+                      <option value="expense" data-i18n="expenseOption">Pengeluaran</option>
+                      <option value="income" data-i18n="incomeOption">Pemasukan</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="account" data-i18n="accountColumn">Akun</label>
+                    <select id="account" name="account">
+                      <option value="">-- Pilih Akun --</option>
+                      <option value="Cash">Cash</option>
+                      <option value="BCA">BCA</option>
+                      <option value="Maybank">Maybank</option>
+                      <option value="Seabank">Seabank</option>
+                      <option value="Shopeepay">Shopeepay</option>
+                      <option value="Gopay">Gopay</option>
+                      <option value="Jago">Jago</option>
+                      <option value="ISaku">ISaku</option>
+                      <option value="Ovo">Ovo</option>
+                      <option value="Superbank">Superbank</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div>
+                    <label for="category" data-i18n="categoryLabel">Kategori</label>
+                    <select id="category" name="category">
+                      <option value="">-- Pilih Kategori --</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="amount" data-i18n="amountLabel">Jumlah</label>
+                    <input type="number" id="amount" name="amount" step="0.01" placeholder="0" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div style="grid-column: 1 / -1;">
+                    <label for="description" data-i18n="descriptionLabel">Deskripsi</label>
+                    <textarea id="description" name="description" rows="2" placeholder="opsional"></textarea>
+                  </div>
+                </div>
+
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+                  <button type="button" id="btn-clear-tx" style="background:#e5e7eb; color:#4b5563;" data-i18n="clearButton"><i class="fas fa-eraser"></i> Bersihkan</button>
+                  <button type="submit" id="btn-save" data-i18n="saveTransactionButton"><i class="fas fa-save"></i> Simpan Transaksi</button>
+                </div>
+                <div id="tx-msg" class="small" style="margin-top:8px;"></div>
+              </form>
+            </div>
+          </div>
+
+          <div id="transfer-tx" class="sub-tab-content">
+            <h2 data-i18n="fundTransferTitle"><i class="fas fa-exchange-alt"></i> Pemindahan Dana</h2>
+            <form id="transfer-form">
+              <div class="row">
+                <div>
+                  <label for="transfer-date" data-i18n="dateLabel">Tanggal</label>
+                  <input type="date" id="transfer-date" name="transfer-date" />
+                </div>
+                <div>
+                  <label for="transfer-amount" data-i18n="amountLabel">Jumlah</label>
+                  <input type="number" id="transfer-amount" name="transfer-amount" step="0.01" />
+                </div>
+              </div>
+
+              <div class="row">
+                <div>
+                  <label for="transfer-from" data-i18n="fromAccountLabel">Dari Akun</label>
+                  <select id="transfer-from" name="transfer-from">
+                    <option value="">-- Pilih Akun Asal --</option>
+                    <option value="Cash">Cash</option>
+                    <option value="BCA">BCA</option>
+                    <option value="Maybank">Maybank</option>
+                    <option value="Seabank">Seabank</option>
+                    <option value="Shopeepay">Shopeepay</option>
+                    <option value="Gopay">Gopay</option>
+                    <option value="Jago">Jago</option>
+                    <option value="ISaku">ISaku</option>
+                    <option value="Ovo">Ovo</option>
+                    <option value="Superbank">Superbank</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="transfer-to" data-i18n="toAccountLabel">Ke Akun</label>
+                  <select id="transfer-to" name="transfer-to">
+                    <option value="">-- Pilih Akun Tujuan --</option>
+                    <option value="Cash">Cash</option>
+                    <option value="BCA">BCA</option>
+                    <option value="Maybank">Maybank</option>
+                    <option value="Seabank">Seabank</option>
+                    <option value="Shopeepay">Shopeepay</option>
+                    <option value="Gopay">Gopay</option>
+                    <option value="Jago">Jago</option>
+                    <option value="ISaku">ISaku</option>
+                    <option value="Ovo">Ovo</option>
+                    <option value="Superbank">Superbank</option>
+                    <option value="Blu Account (saving)">Blu Account (saving)</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div id="savings-goal-selector" style="display: none;">
+                <label for="transfer-to-goal" data-i18n="selectSavingsGoalLabel">Pilih Target Tabungan</label>
+                <select id="transfer-to-goal" name="transfer-to-goal"></select>
+              </div>
+
+              <label for="transfer-desc" data-i18n="descriptionOptionalLabel">Deskripsi (opsional)</label>
+              <textarea id="transfer-desc" name="transfer-desc" rows="2" placeholder="misal: Tarik tunai dari BCA"></textarea>
+
+              <button type="submit" id="btn-transfer" data-i18n="transferFundButton"><i class="fas fa-exchange-alt"></i> Pindahkan Dana</button>
+              <div id="transfer-msg" class="small"></div>
+            </form>
+          </div>
+
+          <div id="history-tx" class="sub-tab-content">
+            <h2 data-i18n="transactionHistoryTitle"><i class="fas fa-history"></i> Riwayat Transaksi</h2>
+            
+            <div id="history-filters" style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+              <div>
+                <label for="filter-start-date" data-i18n="startDateLabel">Dari Tanggal</label>
+                <input type="date" id="filter-start-date">
+              </div>
+              <div>
+                <label for="filter-end-date" data-i18n="endDateLabel">Sampai Tanggal</label>
+                <input type="date" id="filter-end-date">
+              </div>
+              <div>
+                <label for="filter-type" data-i18n="typeLabel">Tipe</label>
+                <select id="filter-type">
+                  <option value="">Semua</option>
+                  <option value="income">Pemasukan</option>
+                  <option value="expense">Pengeluaran</option>
+                  <option value="transfer">Transfer</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-q" data-i18n="searchDescriptionLabel">Cari Deskripsi</label>
+                <input type="text" id="filter-q" placeholder="e.g., Makan siang">
+              </div>
+              <div style="align-self: end; display: flex; gap: 8px;">
+                <button type="button" id="btn-apply-filter" style="width: 100%;" data-i18n="applyFilterButton"><i class="fas fa-filter"></i> Terapkan</button>
+                <button type="button" id="btn-reset-filter" style="width: 100%; background: #e5e7eb; color: #4b5563;" data-i18n="resetFilterButton"><i class="fas fa-times"></i> Reset</button>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table id="tx-table" class="modern-table sticky-head">
+                <thead>
+                  <tr>
+                    <th data-i18n="dateColumn">Tanggal</th><th data-i18n="typeColumn">Tipe</th><th data-i18n="categoryColumn">Kategori</th><th style="text-align: right;" data-i18n="amountColumn">Jumlah</th><th data-i18n="accountColumn">Akun</th><th data-i18n="actionsColumn">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <div id="tx-empty" class="empty-state" style="display:none;">
+                <i class="fas fa-inbox"></i>
+                <p data-i18n="noTransactions">Belum ada transaksi untuk filter ini.</p>
+              </div>
+              <div id="tx-pagination" class="pagination" style="display:none;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: SAVINGS -->
+      <div id="savings" class="tab-content">
+        <div class="card">
+          <div class="sub-tabs">
+            <button class="sub-tab-button active" onclick="switchSavingsSubTab('active-goals')" data-i18n="activeGoalsSubTab"><i class="fas fa-bullseye"></i> Target Aktif</button>
+            <button class="sub-tab-button" onclick="switchSavingsSubTab('add-goal')" data-i18n="addGoalSubTab"><i class="fas fa-plus-circle"></i> Tambah Target</button>
+            <button class="sub-tab-button" onclick="switchSavingsSubTab('completed-goals')" data-i18n="completedGoalsSubTab"><i class="fas fa-check-circle"></i> Target Tercapai</button>
+          </div>
+
+          <!-- SUB-TAB: ACTIVE GOALS -->
+          <div id="active-goals" class="sub-tab-content active">
+            <div style="background: #dbeafe; padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #2563eb;">
+              <p style="font-size: 13px; margin: 0; color: #1e40af;">
+                <i class="fas fa-lightbulb"></i>
+                <span data-i18n="savingsGoalInfo">Kelola target tabungan Anda dan lacak progress secara real-time</span>
+              </p>
+            </div>
+
+            <!-- Quick Stats -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px; border-radius: 10px;">
+                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;"><i class="fas fa-bullseye"></i> Total Target</div>
+                <div style="font-size: 24px; font-weight: bold;" id="total-goals-count">0</div>
+              </div>
+              <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 16px; border-radius: 10px;">
+                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;"><i class="fas fa-piggy-bank"></i> Total Terkumpul</div>
+                <div style="font-size: 20px; font-weight: bold;" id="total-saved-amount">Rp 0</div>
+              </div>
+              <div style="background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white; padding: 16px; border-radius: 10px;">
+                <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;"><i class="fas fa-chart-line"></i> Progress Rata-rata</div>
+                <div style="font-size: 24px; font-weight: bold;" id="average-progress">0%</div>
+              </div>
+            </div>
+
+            <!-- Filter & Sort -->
+            <div style="background: #f9fafb; padding: 12px; border-radius: 8px; margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+              <div style="flex: 1; min-width: 150px;">
+                <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">Urutkan</label>
+                <select id="sort-goals" style="width: 100%; padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px;">
+                  <option value="progress-asc">Progress: Terendah dulu</option>
+                  <option value="progress-desc">Progress: Tertinggi dulu</option>
+                  <option value="deadline-asc">Deadline: Terdekat dulu</option>
+                  <option value="amount-desc">Target: Terbesar dulu</option>
+                  <option value="name-asc">Nama: A-Z</option>
+                </select>
+              </div>
+              <div style="flex: 1; min-width: 150px;">
+                <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">Cari Target</label>
+                <input type="text" id="search-goals" placeholder="Ketik nama target..." style="width: 100%; padding: 6px 8px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px;" />
+              </div>
+              <div style="align-self: flex-end;">
+                <button type="button" onclick="applySavingsFilter()" style="padding: 6px 12px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
+                  <i class="fas fa-filter"></i> Terapkan
+                </button>
+              </div>
+            </div>
+
+            <!-- Goals List -->
+            <div id="savings-list"></div>
+          </div>
+
+          <!-- SUB-TAB: ADD GOAL -->
+          <div id="add-goal" class="sub-tab-content">
+            <div class="card" style="box-shadow:none; border:1.5px solid #e5e7eb;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 data-i18n="addGoalTitle" style="margin:0;">
+                  <i class="fas fa-plus-circle"></i> Tambah Target Tabungan
+                </h2>
+                <div class="small" style="color:#6b7280;">
+                  <i class="fas fa-lightbulb"></i>
+                  <span data-i18n="goalHint">Tips: Tetapkan target realistis dan deadline yang jelas.</span>
+                </div>
+              </div>
+
+              <form id="savings-form" style="margin-top:12px;">
+                <div class="row">
+                  <div>
+                    <label for="goal-name" data-i18n="goalNameLabel">Nama Target</label>
+                    <input type="text" id="goal-name" placeholder="Liburan Bali, Beli Mobil, Dana Darurat..." required />
+                  </div>
+                  <div>
+                    <label for="goal-target" data-i18n="targetAmountLabel">Target Amount (Rp)</label>
+                    <input type="number" id="goal-target" placeholder="10000000" step="100000" required />
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label for="goal-date" data-i18n="targetDateLabel">Tanggal Target</label>
+                    <input type="date" id="goal-date" />
+                  </div>
+                  <div>
+                    <label for="goal-initial" data-i18n="initialAmountLabel">Saldo Awal (opsional)</label>
+                    <input type="number" id="goal-initial" placeholder="0" step="1000" />
+                  </div>
+                </div>
+                <div class="row">
+                  <div style="grid-column: 1 / -1;">
+                    <label for="goal-desc" data-i18n="descriptionLabel">Deskripsi</label>
+                    <textarea id="goal-desc" rows="2" placeholder="Deskripsikan tujuan tabungan Anda (opsional)" style="resize: vertical;"></textarea>
+                  </div>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+                  <button type="button" onclick="clearGoalForm()" style="background:#e5e7eb; color:#4b5563;" data-i18n="clearButton">
+                    <i class="fas fa-eraser"></i> Bersihkan
+                  </button>
+                  <button type="submit" id="btn-add-goal" data-i18n="addGoalButton">
+                    <i class="fas fa-save"></i> Simpan Target
+                  </button>
+                </div>
+                <div id="goal-msg" class="small" style="margin-top:8px;"></div>
+              </form>
+            </div>
+          </div>
+
+          <!-- SUB-TAB: COMPLETED GOALS -->
+          <div id="completed-goals" class="sub-tab-content">
+            <div style="background: #d1fae5; padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #10b981;">
+              <p style="font-size: 13px; margin: 0; color: #047857;">
+                <i class="fas fa-trophy"></i>
+                <span>Selamat! Ini adalah pencapaian target tabungan Anda.</span>
+              </p>
+            </div>
+            <div id="completed-savings-list" style="min-height: 200px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: ADVISOR -->
+      <div id="advisor" class="tab-content">
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <div style="position: relative;">
+            <button id="collapse-sidebar-btn" title="Toggle sidebar" style="position: absolute; top: 16px; left: 16px; z-index: 10; width: 36px; height: 36px; padding: 0; justify-content: center; background: rgba(255, 255, 255, 0.9); color: #4b5563; border: 1.5px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-radius: 8px; backdrop-filter: blur(4px); transition: all 0.3s ease;"><i class="fas fa-chevron-left"></i></button>
+            <button id="new-chat-collapsed-btn" title="New chat" style="position: absolute; top: 64px; left: 16px; z-index: 10; width: 36px; height: 36px; padding: 0; justify-content: center; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); border-radius: 8px; display: none; transition: all 0.3s ease;"><i class="fas fa-plus"></i></button>
+            <div class="advisor-layout">
+              <div id="chat-sidebar">
+                <div id="sidebar-main-content">
+                  <button id="new-chat-btn" data-i18n="newChatButton" style="margin-top: 64px;"><i class="fas fa-plus"></i> Obrolan Baru</button>
+                  <h3 data-i18n="chatHistoryHeader" style="font-size: 13px; color: #6b7280; margin: 16px 0 8px 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Riwayat Obrolan</h3>
+                  <div id="chat-session-list"></div>
+                </div>
+                <div id="sidebar-footer">
+                  <!-- Model selector in sidebar -->
+                </div>
+              </div>
+              <div id="sidebar-resizer"></div>
+              <div id="chat-main" style="overflow: hidden; display: flex; flex-direction: column; background: linear-gradient(180deg, #fafbfc 0%, #ffffff 100%);">
+                <div id="chat-welcome-screen" class="chat-welcome-modern">
+                  <div class="welcome-icon-container">
+                    <div class="welcome-icon-bg"></div>
+                    <i class="fas fa-robot welcome-icon"></i>
+                  </div>
+                  <h2 class="welcome-title" data-i18n="welcomeToAdvisor">Welcome to Advisor AI</h2>
+                  <p class="welcome-subtitle" data-i18n="welcomeToAdvisorDesc">Asisten keuangan pintar Anda. Mulai percakapan untuk mendapatkan saran finansial.</p>
+                  
+                  <div class="welcome-features">
+                    <div class="feature-badge">
+                      <i class="fas fa-chart-line"></i>
+                      <span data-i18n="featureFinancialAnalysis">Analisis Keuangan</span>
+                    </div>
+                    <div class="feature-badge">
+                      <i class="fas fa-lightbulb"></i>
+                      <span data-i18n="featureSavingsAdvice">Saran Tabungan</span>
+                    </div>
+                    <div class="feature-badge">
+                      <i class="fas fa-wallet"></i>
+                      <span data-i18n="featureBudgetManagement">Kelola Budget</span>
+                    </div>
+                  </div>
+
+                  <div id="dynamic-prompts-container" class="suggested-prompts"></div>
+                </div>
+                <div id="chat-box" class="chat-box-modern" style="display: none;"></div>
+                <div id="typing-indicator" class="typing-indicator" style="display: none;">
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                  <div class="typing-dot"></div>
+                  <span>AI sedang mengetik...</span>
+                </div>
+                <form id="chat-form" class="chat-input-container">
+                  <div class="chat-input-header">
+                    <div class="model-selector-compact">
+                      <i class="fas fa-brain" style="font-size: 11px; color: #9ca3af;"></i>
+                      <select id="model-provider" style="padding: 2px 6px; font-size: 11px; border: none; background: transparent; color: #6b7280;">
+                        <option value="google">Gemini 2.5 Flash</option>
+                        <option value="openai">GPT-4o mini</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="chat-input-wrapper">
+                    <button type="button" id="btn-clear-chat" class="input-action-btn" title="Clear chat">
+                      <i class="fas fa-trash-alt"></i>
+                    </button>
+                    <textarea id="chat-input" rows="1" placeholder="Ketik pesan Anda..." data-i18n-placeholder="chatPlaceholder"></textarea>
+                    <button type="submit" id="btn-chat" class="input-submit-btn" title="Send message">
+                      <i class="fas fa-paper-plane"></i>
+                    </button>
+                  </div>
+                  <div class="chat-input-footer">
+                    <p class="small" style="margin: 0; font-size: 10px;" data-i18n="aiDisclaimer">
+                      AI dapat membuat kesalahan. Verifikasi informasi penting.
+                    </p>
+                  </div>
+                  <div id="chat-msg" class="small" style="margin-top: 4px;"></div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Savings Goal Edit Modal -->
+      <div id="savings-edit-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 style="margin:0;" data-i18n="editGoalTitle">Edit Target Tabungan</h3>
+            <button class="close-btn" onclick="closeSavingsEditModal()">&times;</button>
+          </div>
+          <form id="savings-edit-form" onsubmit="saveSavingsEdit(event)">
+            <input type="hidden" id="edit-goal-id">
+            <label for="edit-goal-name" data-i18n="goalNameLabel">Nama Target</label>
+            <input type="text" id="edit-goal-name" required />
+            
+            <label for="edit-goal-target" data-i18n="targetAmountLabel">Target Amount (Rp)</label>
+            <input type="number" step="1000" id="edit-goal-target" required />
+
+            <label for="edit-goal-date" data-i18n="targetDateLabel">Target Date</label>
+            <input type="date" id="edit-goal-date" />
+
+            <label for="edit-goal-desc" data-i18n="descriptionLabel">Deskripsi</label>
+            <textarea id="edit-goal-desc" rows="2"></textarea>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+              <button type="button" class="btn-delete" onclick="closeSavingsEditModal()" data-i18n="cancelButton">Batal</button>
+              <button type="submit" class="btn-edit" data-i18n="saveChangesButton">Simpan Perubahan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Transaction Edit Modal -->
+      <div id="transaction-edit-modal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 style="margin:0;" data-i18n="editTransactionTitle">Edit Transaksi</h3>
+            <button class="close-btn" onclick="closeTransactionModal()">&times;</button>
+          </div>
+          <form id="transaction-edit-form" onsubmit="saveTransactionEdit(event)">
+            <input type="hidden" id="edit-tx-id">
+            <label for="edit-tx-date" data-i18n="dateLabel">Tanggal</label>
+            <input type="date" id="edit-tx-date" required />
+            <label for="edit-tx-type" data-i18n="typeLabel">Tipe</label>
+            <select id="edit-tx-type" required>
+              <option value="expense">Pengeluaran</option>
+              <option value="income">Pemasukan</option>
+            </select>
+            <label for="edit-tx-category" data-i18n="categoryLabel">Kategori</label>
+            <select id="edit-tx-category">
+              <option value="">-- Pilih Kategori --</option>
+            </select>
+            <label for="edit-tx-amount" data-i18n="amountLabel">Jumlah</label>
+            <input type="number" step="0.01" id="edit-tx-amount" required />
+            <label for="edit-tx-account">Akun</label>
+            <select id="edit-tx-account">
+              <option value="">-- Pilih Akun --</option>
+              <option value="Cash">Cash</option>
+              <option value="BCA">BCA</option>
+              <option value="Maybank">Maybank</option>
+              <option value="Seabank">Seabank</option>
+              <option value="Shopeepay">Shopeepay</option>
+              <option value="Gopay">Gopay</option>
+              <option value="Jago">Jago</option>
+              <option value="ISaku">ISaku</option>
+              <option value="Ovo">Ovo</option>
+              <option value="Superbank">Superbank</option>
+            </select>
+            <label for="edit-tx-description" data-i18n="descriptionLabel">Deskripsi</label>
+            <textarea id="edit-tx-description" rows="2"></textarea>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+              <button type="button" class="btn-delete" onclick="closeTransactionModal()" data-i18n="cancelButton">Batal</button>
+              <button type="submit" class="btn-edit" data-i18n="saveButton">Simpan</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script src="/static/savings-helper.js"></script>
+  </body>
+</html>

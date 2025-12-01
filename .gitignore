@@ -1,0 +1,42 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment
+.env
+*.env
+!.env.example
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+backend/finance.db
+
+# Development & Testing
+backend/archive/
+backend/notebook.ipynb
+backend/server.log
+*.log
+
+# Uploads
+public/uploads/avatars/*
+!public/uploads/avatars/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Render
+.render/

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n="userManagement">Manajemen Pengguna</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script defer src="https://kit.fontawesome.com/a2e0e6ad4b.js" crossorigin="anonymous"></script>
+    <style>
+        /* Minimal page-scoped tweaks to avoid global CSS bloat */
+        .admin-container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+        .admin-header-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+        .admin-stat-card { display: flex; align-items: center; gap: 12px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        .admin-stat-card .stat-icon { width: 40px; height: 40px; border-radius: 10px; display:flex; align-items:center; justify-content:center; color:#fff; background: linear-gradient(135deg,#667eea,#764ba2); }
+        .admin-stat-card .stat-label { font-size: 12px; color: #6b7280; }
+        .admin-stat-card .stat-value { font-size: 20px; font-weight: 700; color: #111827; }
+        .admin-toolbar { display:flex; justify-content: space-between; align-items:center; gap:12px; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:16px; }
+        .admin-table-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; box-shadow: 0 6px 16px rgba(0,0,0,0.06); }
+        .table-responsive { overflow:auto; }
+        .admin-table { width:100%; border-collapse: collapse; }
+        .admin-table thead th { position: sticky; top:0; background:#f9fafb; border-bottom:1px solid #e5e7eb; padding:12px; text-align:left; font-weight:600; color:#374151; }
+        .admin-table tbody td { border-top:1px solid #f3f4f6; padding:12px; font-size:14px; color:#374151; }
+        .role-badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+        .role-admin { background:#fff7ed; color:#a16207; border:1px solid #fde68a; }
+        .role-user { background:#eef2ff; color:#4f46e5; border:1px solid #c7d2fe; }
+        .table-actions { display:flex; gap:8px; }
+        .table-pagination { display:flex; justify-content:center; align-items:center; gap:12px; padding:12px; }
+        .page-btn { padding:8px 12px; border:1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; }
+        .page-btn:hover { background:#f9fafb; }
+        .modal { display:none; position:fixed; inset:0; z-index:1000; }
+        .modal.active { display:block; }
+        .modal-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.35); }
+        .modal-dialog { position:relative; max-width:560px; margin: 10vh auto; background:#fff; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,0.2); }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid #e5e7eb; }
+        .modal-body { padding:16px; }
+        .modal-footer { display:flex; justify-content:flex-end; gap:8px; padding:14px 16px; border-top:1px solid #e5e7eb; }
+        .form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+        .toast { position:fixed; bottom:20px; right:20px; background:#111827; color:#fff; padding:10px 14px; border-radius:8px; box-shadow:0 8px 18px rgba(0,0,0,0.2); display:none; }
+        .toast.show { display:block; }
+    </style>
+</head>
+<body>
+            <div id="table-empty" class="table-empty" hidden>
+                <div class="empty-icon"><i class="fas fa-user-slash"></i></div>
+                <div class="empty-title">Belum ada pengguna</div>
+                <div class="empty-desc">Tambahkan pengguna baru atau ubah filter pencarian.</div>
+                <button id="empty-add" class="btn-primary">Tambah Pengguna</button>
+            </div>
+            <div id="table-loading" class="table-loading" hidden>
+                <div class="skeleton-row"></div>
+                <div class="skeleton-row"></div>
+                <div class="skeleton-row"></div>
+            </div>
+        <header>
+            <h1>
+                <i class="fas fa-wallet"></i>
+                <span data-i18n="appTitle">Financial Assistant</span>
+            </h1>
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <div class="lang-switcher">
+                    <button id="lang-id" class="lang-button">ID</button>
+                    <button id="lang-en" class="lang-button">EN</button>
+                </div>
+                <div id="user-menu-container"></div>
+            </div>
+        </header>
+
+    <main class="admin-container">
+        <h1 class="page-title" data-i18n="userManagement">Manajemen Pengguna</h1>
+        <div class="admin-header-grid">
+            <div class="admin-stat-card" id="stat-total-users">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-content">
+                    <div class="stat-label">Total Users</div>
+                    <div class="stat-value" id="statUsers">0</div>
+                </div>
+            </div>
+            <div class="admin-stat-card" id="stat-admins">
+                <div class="stat-icon"><i class="fas fa-user-shield"></i></div>
+                <div class="stat-content">
+                    <div class="stat-label">Admins</div>
+                    <div class="stat-value" id="statAdmins">0</div>
+                </div>
+            </div>
+            <div class="admin-stat-card" id="stat-users">
+                <div class="stat-icon"><i class="fas fa-user"></i></div>
+                <div class="stat-content">
+                    <div class="stat-label">Standard</div>
+                    <div class="stat-value" id="statStandard">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-toolbar">
+            <div class="toolbar-left">
+                <div class="input-with-icon">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="search-input" placeholder="Cari nama atau email" data-i18n-placeholder="searchPlaceholder" />
+                </div>
+                <select id="role-filter">
+                    <option value="" data-i18n="allRoles">Semua Role</option>
+                    <option value="admin" data-i18n="roleAdmin">Admin</option>
+                    <option value="user" data-i18n="roleUser">User</option>
+                </select>
+            </div>
+            <div class="toolbar-right">
+                <button id="add-user-btn" class="btn-primary" data-i18n="addNewUser">Tambah Pengguna</button>
+            </div>
+        </div>
+
+        <div class="admin-table-card">
+            <div class="table-responsive">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="userId">ID</th>
+                            <th data-i18n="userName">Nama</th>
+                            <th data-i18n="userEmail">Email</th>
+                            <th data-i18n="userRole">Role</th>
+                            <th data-i18n="actions">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-tbody"></tbody>
+                </table>
+            </div>
+            <div class="table-pagination">
+                <button class="page-btn" id="prev-page">Prev</button>
+                <span id="page-info">1 / 1</span>
+                <button class="page-btn" id="next-page">Next</button>
+            </div>
+        </div>
+
+        <!-- Modal: Add/Edit User -->
+        <div class="modal" id="user-modal" aria-hidden="true">
+            <div class="modal-backdrop" data-modal-close></div>
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="modal-title" data-i18n="addUser">Tambah Pengguna</h3>
+                    <button class="modal-close" data-modal-close>&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="input-with-icon">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="modal-name" placeholder="Nama" data-i18n-placeholder="userName" />
+                        </div>
+                        <div class="input-with-icon">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="modal-email" placeholder="Email" data-i18n-placeholder="userEmail" />
+                        </div>
+                        <div class="input-with-icon">
+                            <i class="fas fa-key"></i>
+                            <input type="password" id="modal-password" placeholder="Password" data-i18n-placeholder="passwordLabel" />
+                        </div>
+                        <div class="input-with-icon">
+                            <i class="fas fa-id-badge"></i>
+                            <select id="modal-role">
+                                <option value="user" data-i18n="roleUser">User</option>
+                                <option value="admin" data-i18n="roleAdmin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" data-modal-close data-i18n="cancel">Batal</button>
+                    <button class="btn-primary" id="modal-save" data-i18n="save">Simpan</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast messages -->
+        <div id="toast" class="toast" aria-hidden="true"></div>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+    <script src="/static/admin.js" defer></script>
+  </body>
+</html>
