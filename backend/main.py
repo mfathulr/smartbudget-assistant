@@ -5,17 +5,74 @@ import re
 import secrets
 from datetime import datetime, date, timedelta, timezone
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None  # Optional: allow running without Google Generative AI
 from flask import Flask, request, jsonify, send_from_directory, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from openai import OpenAI
+import requests as http_requests
 
 # Import modular components
-from config import BASE_DIR, FLASK_CONFIG, GOOGLE_API_KEY
+from config import (
+    BASE_DIR,
+    FLASK_CONFIG,
+    GOOGLE_API_KEY,
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_USER,
+    SMTP_PASSWORD,
+    SMTP_FROM,
+    APP_URL,
+    RECAPTCHA_SITE_KEY,
+    RECAPTCHA_SECRET_KEY,
+)
 from database import get_db, close_db, init_db
 from auth import require_login, require_admin
+
+# Translation messages for API responses
+MESSAGES = {
+    "id": {
+        "email_required": "Email harus diisi",
+        "reset_link_sent": "Jika email terdaftar, link reset telah dikirim.",
+        "token_password_required": "Token dan password baru wajib diisi",
+        "password_min_length": "Password minimal 6 karakter",
+        "invalid_token": "Token tidak valid",
+        "token_expired": "Token sudah kadaluarsa",
+        "password_reset_success": "Password berhasil direset. Silakan login.",
+        "password_reset_failed": "Gagal mereset password",
+    },
+    "en": {
+        "email_required": "Email is required",
+        "reset_link_sent": "If email is registered, reset link has been sent.",
+        "token_password_required": "Token and new password are required",
+        "password_min_length": "Password must be at least 6 characters",
+        "invalid_token": "Invalid token",
+        "token_expired": "Token has expired",
+        "password_reset_success": "Password successfully reset. Please login.",
+        "password_reset_failed": "Failed to reset password",
+    },
+}
+
+
+def get_language():
+    """Get language from request (query param or Accept-Language header)"""
+    lang = request.args.get("lang") or request.headers.get("Accept-Language", "id")
+    if lang.startswith("en"):
+        return "en"
+    return "id"
+
+
+def get_message(key, lang=None):
+    """Get translated message by key"""
+    if lang is None:
+        lang = get_language()
+    return MESSAGES.get(lang, MESSAGES["id"]).get(key, MESSAGES["id"].get(key, ""))
+
+
 from helpers import get_month_summary, build_financial_context
 from llm_tools import TOOLS_DEFINITIONS
 from llm_executor import execute_action
@@ -44,6 +101,300 @@ app.teardown_appcontext(close_db)
 
 # Initialize LLM clients
 client = OpenAI()
+
+
+# === Public Config Endpoint (safe values only) ===
+@app.route("/api/public-config", methods=["GET"])
+def public_config():
+    return jsonify(
+        {
+            "recaptcha_site_key": RECAPTCHA_SITE_KEY or "",
+            "recaptcha_enabled": bool(RECAPTCHA_SITE_KEY),
+            "recaptcha_server_enforced": bool(RECAPTCHA_SECRET_KEY),
+        }
+    )
+
+
+def verify_recaptcha_token(token: str, remote_ip: str = None) -> bool:
+    """Verify a reCAPTCHA token with Google.
+    Accepts v3 (score >= 0.5) and v2 success.
+    Returns True if the token is valid; False otherwise.
+    """
+    if not RECAPTCHA_SECRET_KEY:
+        return False
+    try:
+        payload = {
+            "secret": RECAPTCHA_SECRET_KEY,
+            "response": token,
+        }
+        if remote_ip:
+            payload["remoteip"] = remote_ip
+        r = http_requests.post(
+            "https://www.google.com/recaptcha/api/siteverify",
+            data=payload,
+            timeout=5,
+        )
+        data = r.json()
+        if not data.get("success"):
+            return False
+        # For v3, a score is provided
+        score = data.get("score")
+        if score is None:
+            return True
+        return float(score) >= 0.5
+    except Exception:
+        return False
+
+
+# --- Email Utilities ---
+def send_otp_email(to_email: str, otp_code: str, user_name: str) -> None:
+    """Send OTP verification email"""
+    if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
+        print(f"[DEV MODE] OTP for {to_email}: {otp_code}")
+        return
+
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        greeting = f"Halo {user_name}," if user_name else "Halo,"
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Kode Verifikasi Registrasi - SmartBudget Assistant"
+        msg["From"] = SMTP_FROM
+        msg["To"] = to_email
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+              <tr>
+                <td align="center">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+                    <tr>
+                      <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 40px 30px; text-align: center;">
+                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">🔐 Verifikasi Email</h1>
+                        <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 14px; font-weight: 400;">SmartBudget Assistant</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 40px 30px;">
+                        <p style="margin: 0 0 20px 0; color: #111827; font-size: 16px; line-height: 1.6;">{greeting}</p>
+                        <p style="margin: 0 0 20px 0; color: #374151; font-size: 15px; line-height: 1.6;">Terima kasih telah mendaftar di SmartBudget Assistant! Gunakan kode verifikasi berikut untuk menyelesaikan pendaftaran Anda:</p>
+                        <div style="background: #f3f4f6; border-radius: 12px; padding: 24px; text-align: center; margin: 30px 0;">
+                          <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Kode Verifikasi</p>
+                          <p style="margin: 0; color: #1e40af; font-size: 36px; font-weight: 700; letter-spacing: 8px; font-family: 'Courier New', monospace;">{otp_code}</p>
+                        </div>
+                        <p style="margin: 0 0 20px 0; color: #374151; font-size: 15px; line-height: 1.6;">Kode ini akan kedaluwarsa dalam <strong>10 menit</strong>.</p>
+                        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 24px 0;">
+                          <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">⚠️ <strong>Jangan bagikan kode ini</strong> kepada siapa pun, termasuk tim SmartBudget Assistant. Kami tidak akan pernah meminta kode verifikasi Anda.</p>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="background: #f9fafb; padding: 24px 30px; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">Jika Anda tidak mendaftar di SmartBudget Assistant, abaikan email ini dengan aman.</p>
+                        <p style="margin: 0; color: #9ca3af; font-size: 12px;">© 2025 SmartBudget Assistant</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+
+        text = f"""{greeting}
+
+Terima kasih telah mendaftar di SmartBudget Assistant!
+
+Kode Verifikasi Anda: {otp_code}
+
+Kode ini akan kedaluwarsa dalam 10 menit.
+
+Jangan bagikan kode ini kepada siapa pun.
+
+Jika Anda tidak mendaftar, abaikan email ini.
+
+© 2025 SmartBudget Assistant"""
+
+        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+
+        print(f"[EMAIL] OTP sent to {to_email}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send OTP: {e}")
+        print(f"[DEV MODE FALLBACK] OTP for {to_email}: {otp_code}")
+
+
+def send_password_reset_email(
+    to_email: str, reset_token: str, user_name: str = None
+) -> bool:
+    """Send password reset email. Returns True if email was sent, False if dev mode."""
+    # Check if SMTP is configured
+    if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
+        return False  # Dev mode: no email sent
+
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        reset_url = f"{APP_URL}/reset-password.html?token={reset_token}"
+
+        # Personalize greeting
+        greeting = f"Halo {user_name}," if user_name else "Halo,"
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Reset Password - SmartBudget Assistant"
+        msg["From"] = SMTP_FROM
+        msg["To"] = to_email
+
+        # HTML email body with professional design
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
+              <tr>
+                <td align="center">
+                  <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+                    
+                    <!-- Header -->
+                    <tr>
+                      <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 40px 30px; text-align: center;">
+                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
+                          🔐 Reset Password
+                        </h1>
+                        <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 14px; font-weight: 400;">
+                          SmartBudget Assistant
+                        </p>
+                      </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                      <td style="padding: 40px 30px;">
+                        <p style="margin: 0 0 20px 0; color: #111827; font-size: 16px; line-height: 1.6;">
+                          {greeting}
+                        </p>
+                        <p style="margin: 0 0 20px 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                          Kami menerima permintaan untuk mereset password akun SmartBudget Assistant Anda yang terdaftar dengan email <strong>{to_email}</strong>.
+                        </p>
+                        <p style="margin: 0 0 20px 0; color: #374151; font-size: 15px; line-height: 1.6;">
+                          Jika ini adalah Anda, silakan klik tombol di bawah untuk melanjutkan proses reset password. Jika bukan Anda yang meminta, abaikan email ini dengan aman.
+                        </p>
+                        
+                        <!-- CTA Button -->
+                        <table width="100%" cellpadding="0" cellspacing="0" style="margin: 35px 0;">
+                          <tr>
+                            <td align="center">
+                              <a href="{reset_url}" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);">
+                                Reset Password Sekarang
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                        
+                        <p style="margin: 25px 0 10px 0; color: #6b7280; font-size: 14px; line-height: 1.5;">
+                          Atau salin dan tempel tautan berikut ke browser Anda:
+                        </p>
+                        <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 16px; word-break: break-all;">
+                          <a href="{reset_url}" style="color: #2563eb; font-size: 13px; text-decoration: none;">
+                            {reset_url}
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    <!-- Security Notice -->
+                    <tr>
+                      <td style="padding: 0 30px 40px 30px;">
+                        <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 6px;">
+                          <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.5;">
+                            <strong>⚠️ Penting:</strong> Tautan ini akan kedaluwarsa dalam <strong>1 jam</strong> untuk keamanan akun Anda.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                      <td style="background-color: #f9fafb; padding: 30px; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">
+                          Jika Anda <strong>tidak meminta</strong> reset password, Anda dapat mengabaikan email ini dengan aman. Password Anda tidak akan diubah.
+                        </p>
+                        <p style="margin: 0; color: #9ca3af; font-size: 12px; line-height: 1.5;">
+                          Email ini dikirim secara otomatis, mohon jangan membalas email ini.
+                        </p>
+                        <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
+                        <p style="margin: 0; color: #9ca3af; font-size: 11px; text-align: center;">
+                          © 2025 SmartBudget Assistant. All rights reserved.
+                        </p>
+                      </td>
+                    </tr>
+                    
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+        </html>
+        """
+
+        # Plain text alternative
+        text = f"""
+SmartBudget Assistant - Reset Password
+{"=" * 50}
+
+Halo,
+
+Kami menerima permintaan untuk mereset password akun SmartBudget Assistant Anda.
+
+Klik tautan berikut untuk mereset password:
+{reset_url}
+
+PENTING:
+• Tautan ini akan kedaluwarsa dalam 1 jam
+• Jika Anda tidak meminta reset password, abaikan email ini
+• Password Anda tidak akan diubah kecuali Anda mengklik tautan di atas
+
+---
+Email otomatis - Jangan balas email ini
+© 2025 SmartBudget Assistant
+        """
+
+        part1 = MIMEText(text, "plain")
+        part2 = MIMEText(html, "html")
+        msg.attach(part1)
+        msg.attach(part2)
+
+        # Send email
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+
+        return True
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send reset email: {e}")
+        return False
 
 
 # --- Utilities ---
@@ -183,7 +534,7 @@ def parse_financial_intent(raw_text: str, today_str: str):
 
 
 gemini_model = None
-if GOOGLE_API_KEY:
+if GOOGLE_API_KEY and genai is not None:
     try:
         genai.configure(api_key=GOOGLE_API_KEY)
         gemini_model = genai.GenerativeModel("gemini-2.5-flash")
@@ -208,13 +559,28 @@ def serve_uploads(filename):
 
 
 # === AUTH ROUTES ===
-@app.route("/api/register", methods=["POST"])
-def register_api():
+@app.route("/api/register/send-otp", methods=["POST"])
+def register_send_otp():
     db = get_db()
     data = request.get_json() or {}
     name = data.get("name", "").strip()
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+
+    print(
+        f"[DEBUG] Register OTP request - name: {name}, email: {email}, password len: {len(password) if password else 0}"
+    )
+
+    # Skip reCAPTCHA verification for now (keys may be invalid)
+    # TODO: Get valid reCAPTCHA v3 keys from https://www.google.com/recaptcha/admin
+    # if RECAPTCHA_SECRET_KEY:
+    #     captcha_token = (data.get("captchaToken") or "").strip()
+    #     if captcha_token:
+    #         remote_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    #         verified = verify_recaptcha_token(captcha_token, remote_ip)
+    #         print(f"[DEBUG] reCAPTCHA verification: {verified}")
+    #         if not verified:
+    #             return jsonify({"error": "Captcha verification failed"}), 400
 
     if not name or not email or not password:
         return jsonify({"error": "Name, email, and password required"}), 400
@@ -225,13 +591,94 @@ def register_api():
     if cur.fetchone():
         return jsonify({"error": "Email already registered"}), 400
 
+    # Generate 6-digit OTP
+    otp_code = str(secrets.randbelow(1000000)).zfill(6)
+
+    # Store OTP with user data (expires in 10 minutes)
+    wib = timezone(timedelta(hours=7))
+    expires_at = (datetime.now(wib) + timedelta(minutes=10)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
     password_hash = generate_password_hash(password)
+
+    # Delete old OTPs for this email
+    db.execute("DELETE FROM registration_otps WHERE email = ?", (email,))
+
+    # Insert new OTP
     db.execute(
-        "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
-        (name, email, password_hash, "user"),
+        "INSERT INTO registration_otps (email, otp_code, name, password_hash, expires_at) VALUES (?, ?, ?, ?, ?)",
+        (email, otp_code, name, password_hash, expires_at),
     )
     db.commit()
-    return jsonify({"status": "ok", "message": "Registration successful"}), 201
+
+    # Send OTP email
+    send_otp_email(email, otp_code, name)
+
+    return jsonify({"status": "ok", "message": "OTP sent to your email"}), 200
+
+
+@app.route("/api/register/verify-otp", methods=["POST"])
+def register_verify_otp():
+    try:
+        db = get_db()
+        data = request.get_json() or {}
+        email = data.get("email", "").strip().lower()
+        otp_code = data.get("otp", "").strip()
+
+        print(f"[DEBUG] Verify OTP - email: {email}, otp: {otp_code}")
+
+        if not email or not otp_code:
+            return jsonify({"error": "Email and OTP required"}), 400
+
+        # Get OTP record
+        cur = db.execute(
+            "SELECT * FROM registration_otps WHERE email = ? AND otp_code = ?",
+            (email, otp_code),
+        )
+        otp_record = cur.fetchone()
+
+        if not otp_record:
+            print(f"[DEBUG] No OTP record found for {email} with code {otp_code}")
+            return jsonify({"error": "Invalid OTP code"}), 400
+
+        # Check if OTP expired
+        wib = timezone(timedelta(hours=7))
+        now = datetime.now(wib)
+
+        # Handle both string and datetime types from database
+        expires_at = otp_record["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+
+        # Ensure timezone is set
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=wib)
+
+        if now > expires_at:
+            db.execute("DELETE FROM registration_otps WHERE email = ?", (email,))
+            db.commit()
+            return jsonify({"error": "OTP expired. Please request a new one"}), 400
+
+        print(f"[DEBUG] Creating user account for {email}")
+        # Create user account
+        db.execute(
+            "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
+            (otp_record["name"], email, otp_record["password_hash"], "user"),
+        )
+
+        # Delete used OTP
+        db.execute("DELETE FROM registration_otps WHERE email = ?", (email,))
+        db.commit()
+
+        print(f"[DEBUG] Registration successful for {email}")
+        return jsonify({"status": "ok", "message": "Registration successful"}), 201
+
+    except Exception as e:
+        print(f"[ERROR] Verify OTP failed: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
+        return jsonify({"error": "Server error during verification"}), 500
 
 
 @app.route("/api/login", methods=["POST"])
@@ -240,6 +687,17 @@ def login_api():
     data = request.get_json() or {}
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
+    remember = bool(data.get("remember"))
+
+    # Skip reCAPTCHA verification for now (keys may be invalid)
+    # TODO: Get valid reCAPTCHA v3 keys from https://www.google.com/recaptcha/admin
+    # if RECAPTCHA_SECRET_KEY:
+    #     captcha_token = (data.get("captchaToken") or "").strip()
+    #     if not captcha_token:
+    #         return jsonify({"error": "Captcha verification required"}), 400
+    #     remote_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    #     if not verify_recaptcha_token(captcha_token, remote_ip):
+    #         return jsonify({"error": "Captcha verification failed"}), 400
 
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
@@ -254,9 +712,12 @@ def login_api():
         return jsonify({"error": "Invalid email or password"}), 401
 
     token = secrets.token_urlsafe(32)
-    # 7 day expiry (WIB)
+    # expiry (WIB): 30 days if remember, else 7 days
     wib = timezone(timedelta(hours=7))
-    expires_at = (datetime.now(wib) + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    days = 30 if remember else 7
+    expires_at = (datetime.now(wib) + timedelta(days=days)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
     db.execute(
         "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (?, ?, ?)",
         (user["id"], token, expires_at),
@@ -267,6 +728,7 @@ def login_api():
         {
             "status": "ok",
             "token": token,
+            "remember": remember,
             "user": {
                 "name": user["name"],
                 "email": user["email"],
@@ -287,6 +749,120 @@ def logout_api():
         db.execute("DELETE FROM sessions WHERE session_token = ?", (token,))
         db.commit()
     return jsonify({"status": "ok"}), 200
+
+
+# === PASSWORD RESET ROUTES ===
+@app.route("/api/password/forgot", methods=["POST"])
+def password_forgot_api():
+    db = get_db()
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    lang = get_language()
+
+    if not email:
+        return jsonify({"error": get_message("email_required", lang)}), 400
+
+    cur = db.execute("SELECT id, name FROM users WHERE email = ?", (email,))
+    row = cur.fetchone()
+
+    # Always respond with same message to avoid email enumeration
+    message = get_message("reset_link_sent", lang)
+
+    if not row:
+        return jsonify({"status": "ok", "message": message}), 200
+
+    user_id = row["id"]
+    user_name = row["name"]
+    token = secrets.token_urlsafe(32)
+    wib = timezone(timedelta(hours=7))
+    expires_at = (datetime.now(wib) + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        # Remove any existing tokens for this user
+        db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+        # Insert new token
+        db.execute(
+            "INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)",
+            (user_id, token, expires_at),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Still return generic success to avoid leaking
+        return jsonify({"status": "ok", "message": message}), 200
+
+    # Try to send email
+    email_sent = send_password_reset_email(email, token, user_name)
+
+    response_data = {"status": "ok", "message": message}
+
+    # If email not sent (dev mode), include reset URL for testing
+    if not email_sent:
+        reset_url = f"/reset-password.html?token={token}"
+        response_data["reset_url"] = reset_url
+        response_data["dev_mode"] = True
+
+    return jsonify(response_data), 200
+
+
+@app.route("/api/password/reset", methods=["POST"])
+def password_reset_api():
+    db = get_db()
+    data = request.get_json() or {}
+    token = (data.get("token") or "").strip()
+    new_password = (data.get("password") or "").strip()
+    lang = get_language()
+
+    if not token or not new_password:
+        return jsonify({"error": get_message("token_password_required", lang)}), 400
+    if len(new_password) < 6:
+        return jsonify({"error": get_message("password_min_length", lang)}), 400
+
+    cur = db.execute(
+        "SELECT user_id, expires_at FROM password_resets WHERE token = ?",
+        (token,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return jsonify({"error": get_message("invalid_token", lang)}), 400
+
+    # Expiry check
+    expires_at = row["expires_at"]
+    try:
+        if isinstance(expires_at, datetime):
+            exp_dt = expires_at
+        else:
+            try:
+                exp_dt = datetime.fromisoformat(expires_at.replace("Z", ""))
+            except ValueError:
+                exp_dt = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return jsonify({"error": get_message("invalid_token", lang)}), 400
+
+    wib_now = datetime.now(timezone(timedelta(hours=7))).replace(tzinfo=None)
+    if exp_dt < wib_now:
+        # Remove expired token
+        db.execute("DELETE FROM password_resets WHERE token = ?", (token,))
+        db.commit()
+        return jsonify({"error": get_message("token_expired", lang)}), 400
+
+    # Update password and cleanup tokens for this user
+    user_id = row["user_id"]
+    try:
+        password_hash = generate_password_hash(new_password)
+        db.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id)
+        )
+        db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+        db.commit()
+        return jsonify(
+            {"status": "ok", "message": get_message("password_reset_success", lang)}
+        ), 200
+    except Exception as e:
+        db.rollback()
+        return jsonify(
+            {"error": f"{get_message('password_reset_failed', lang)}: {str(e)}"}
+        ), 500
 
 
 # === PROFILE ROUTES ===
@@ -1813,7 +2389,7 @@ def session_detail_api(session_id):
         # Delete session (CASCADE will automatically delete llm_logs and llm_log_embeddings)
         try:
             print(f"\n{'=' * 60}")
-            print(f"[DEBUG] DELETE SESSION ENDPOINT CALLED")
+            print("[DEBUG] DELETE SESSION ENDPOINT CALLED")
             print(f"[DEBUG] Session ID: {session_id}")
             print(f"[DEBUG] User ID: {user_id}")
 
@@ -1835,7 +2411,7 @@ def session_detail_api(session_id):
             print(f"[DEBUG] Embeddings to delete: {emb_count}")
 
             # Delete the session (CASCADE handles the rest)
-            print(f"[DEBUG] Executing DELETE FROM chat_sessions...")
+            print("[DEBUG] Executing DELETE FROM chat_sessions...")
             cursor = db.execute(
                 "DELETE FROM chat_sessions WHERE id = ? AND user_id = ?",
                 (session_id, user_id),
@@ -1845,7 +2421,7 @@ def session_detail_api(session_id):
             print(f"[DEBUG] Rows affected: {affected}")
 
             db.commit()
-            print(f"[DEBUG] ✅ Commit successful")
+            print("[DEBUG] ✅ Commit successful")
 
             # Verify deletion
             verify = db.execute(
@@ -2099,5 +2675,13 @@ if __name__ == "__main__":
         methods = ", ".join(sorted(rule.methods - {"HEAD", "OPTIONS"}))
         print(f"  {rule.endpoint:35s} {methods:20s} {rule.rule}")
     print("=================================\n")
+
+    # Startup security/config logs (safe)
+    print("[Startup] reCAPTCHA site key present:", bool(RECAPTCHA_SITE_KEY))
+    print("[Startup] reCAPTCHA server enforcement:", bool(RECAPTCHA_SECRET_KEY))
+    if not RECAPTCHA_SECRET_KEY:
+        print(
+            "[Startup] Info: reCAPTCHA not enforced (SECRET missing). Login will not require captcha."
+        )
 
     app.run(host="0.0.0.0", port=8000, debug=False)

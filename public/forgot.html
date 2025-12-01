@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lupa Password - SmartBudget Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%); min-height: 100vh; margin:0; display:grid; grid-template-rows:auto 1fr; position: relative; overflow-x: hidden; }
+    body::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: 
+        radial-gradient(circle at 20% 50%, rgba(255,255,255,0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255,255,255,0.04) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    body::after {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      top: -150px; right: -100px;
+      background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: float 8s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(-30px, 20px) scale(1.1); }
+    }
+    .header {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.9) 0%, rgba(30, 64, 175, 0.9) 100%);
+      backdrop-filter: blur(10px);
+      color: #ffffff;
+      padding: 12px 24px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+    }
+    .header-icon-wrapper {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
+    }
+    .header-icon-wrapper i {
+      font-size: 16px;
+      color: white;
+    }
+    .lang-switcher { display:flex; gap:4px; background: rgba(255, 255, 255, 0.08); padding: 3px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12); }
+    .lang-button { background: transparent; border: none; color:white; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:600; transition: all 0.2s ease; }
+    .lang-button.active { background:white; color:#2563eb; box-shadow: 0 1px 4px rgba(255, 255, 255, 0.2); }
+    .lang-button:not(.active):hover { background: rgba(255,255,255,0.12); }
+    .content-wrapper { display:flex; align-items:center; justify-content:center; padding:40px 24px; }
+    .card { width:100%; max-width:440px; background:#fff; border-radius:12px; padding:32px; box-shadow:0 12px 32px rgba(0,0,0,.25); animation: fadeInUp 0.6s ease-out; position: relative; z-index: 1; overflow: hidden; }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #2563eb 0%, #7c3aed 100%);
+    }
+    .illustration-header {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      animation: fadeIn 0.8s ease-out;
+    }
+    .icon-circle {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: bounceIn 0.8s ease-out;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .icon-circle.primary {
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+      width: 80px;
+      height: 80px;
+      transform: scale(1);
+    }
+    .icon-circle.secondary {
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+      opacity: 0.8;
+    }
+    .icon-circle i {
+      color: white;
+    }
+    .icon-circle.primary i {
+      font-size: 36px;
+    }
+    .icon-circle.secondary i {
+      font-size: 24px;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    .icon-circle.primary {
+      animation: bounceIn 0.8s ease-out, pulse 3s ease-in-out infinite 1s;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    h1.page-title { margin:0 0 6px 0; font-size:20px; color:#1f2937; text-align:center; animation: fadeIn 0.8s ease-out; }
+    p.desc { margin:0 0 16px 0; color:#6b7280; font-size:14px; text-align:center; animation: fadeIn 1s ease-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }
+    input[type="email"] { width:100%; padding:12px; border-radius:8px; border:1.5px solid #e5e7eb; font-size:14px; box-sizing: border-box; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    input:focus { outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.1); transform: scale(1.01); }
+    .btn { width:100%; padding:12px; border-radius:8px; border:none; background: linear-gradient(135deg,#2563eb 0%, #1e40af 100%); color:#fff; font-weight:600; cursor:pointer; transition: all 0.3s ease; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(37,99,235,0.4); }
+    .btn:active { transform: translateY(0); }
+    @keyframes bounceIn {
+      0% { opacity: 0; transform: scale(0.3); }
+      50% { opacity: 1; transform: scale(1.05); }
+      70% { transform: scale(0.9); }
+      100% { transform: scale(1); }
+    }
+    .msg { padding:10px 12px; border-radius:8px; margin-bottom:12px; font-size:13px; display:none; }
+    .success { background:#d1fae5; color:#065f46; border:1px solid #a7f3d0; display:block; }
+    .error { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; display:block; }
+    .links { text-align:center; margin-top:12px; font-size:14px; animation: fadeIn 1.2s ease-out; }
+    .links a { color:#2563eb; font-weight:600; text-decoration:none; transition: color 0.2s ease; }
+    .links a:hover { color: #1e40af; text-decoration: underline; }
+    .hint { font-size:12px; color:#6b7280; margin-top:10px; }
+    
+    /* Tablet & Mobile Responsive */
+    @media (max-width: 768px) {
+      .content-wrapper {
+        padding: 32px 20px;
+      }
+      .card {
+        padding: 28px;
+      }
+    }
+    
+    /* Mobile Specific */
+    @media (max-width: 640px) {
+      .header {
+        padding: 10px 16px;
+      }
+      .header h1 {
+        font-size: 14px;
+      }
+      .header-icon-wrapper {
+        width: 28px;
+        height: 28px;
+      }
+      .header-icon-wrapper i {
+        font-size: 14px;
+      }
+      .lang-button {
+        padding: 5px 10px;
+        font-size: 10px;
+      }
+      .content-wrapper {
+        padding: 24px 16px;
+      }
+      .card {
+        padding: 24px;
+      }
+      .illustration-header {
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .icon-circle.primary {
+        width: 64px;
+        height: 64px;
+      }
+      .icon-circle.primary i {
+        font-size: 28px;
+      }
+      .icon-circle.secondary {
+        width: 52px;
+        height: 52px;
+      }
+      .icon-circle.secondary i {
+        font-size: 20px;
+      }
+      h1.page-title {
+        font-size: 18px;
+      }
+      p.desc {
+        font-size: 13px;
+      }
+    }
+    
+    /* Small Mobile */
+    @media (max-width: 375px) {
+      .header h1 span {
+        display: none;
+      }
+      .card {
+        padding: 20px;
+      }
+      .icon-circle.secondary {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>
+      <div class="header-icon-wrapper">
+        <i class="fas fa-wallet"></i>
+      </div>
+      <span data-i18n="appTitle">SmartBudget Assistant</span>
+    </h1>
+    <div class="lang-switcher">
+      <button id="lang-id" class="lang-button">ID</button>
+      <button id="lang-en" class="lang-button">EN</button>
+    </div>
+  </header>
+
+  <div class="content-wrapper">
+    <div class="card">
+    <div class="illustration-header">
+      <div class="icon-circle secondary">
+        <i class="fas fa-envelope"></i>
+      </div>
+      <div class="icon-circle primary">
+        <i class="fas fa-lock"></i>
+      </div>
+      <div class="icon-circle secondary">
+        <i class="fas fa-key"></i>
+      </div>
+    </div>
+    <h1 class="page-title" data-i18n="forgotPasswordTitle">Lupa Password</h1>
+    <p class="desc" data-i18n="forgotPasswordDesc">Masukkan email Anda. Jika terdaftar, kami akan kirim tautan reset.</p>
+
+    <div id="message" class="msg"></div>
+
+    <form id="forgot-form">
+      <label for="email" data-i18n="emailLabel">Email</label>
+      <input type="email" id="email" data-i18n-placeholder="emailLabel" placeholder="Email" required />
+      <button type="submit" class="btn" style="margin-top:12px;" data-i18n="sendResetLink">Kirim Tautan Reset</button>
+    </form>
+
+    <div class="hint" id="dev-hint" style="display:none;"></div>
+
+    <div class="links" style="margin-top:16px;">
+      <a href="/login.html" data-i18n="backToLogin">Kembali ke Login</a>
+    </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    // Initialize language
+    (function initLanguage() {
+      const savedLang = localStorage.getItem('language') || 'id';
+      const checkAndInit = () => {
+        if (window.setLanguage && window.translations) {
+          window.setLanguage(savedLang);
+          
+          // Setup button listeners
+          const idBtn = document.getElementById('lang-id');
+          const enBtn = document.getElementById('lang-en');
+          if (idBtn) idBtn.addEventListener('click', () => window.setLanguage('id'));
+          if (enBtn) enBtn.addEventListener('click', () => window.setLanguage('en'));
+        } else {
+          setTimeout(checkAndInit, 50);
+        }
+      };
+      
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAndInit);
+      } else {
+        checkAndInit();
+      }
+    })();
+
+    function showMsg(text, kind) {
+      const el = document.getElementById('message');
+      el.textContent = text;
+      el.className = 'msg ' + kind;
+    }
+
+    document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const currentLang = localStorage.getItem('language') || 'id';
+      const t = (window.translations && window.translations[currentLang]) || {};
+      
+      const email = document.getElementById('email').value.trim();
+      if (!email) return;
+
+      try {
+        const res = await fetch(`/api/password/forgot?lang=${currentLang}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showMsg(data.message || t.resetLinkSent || 'Jika email terdaftar, link reset telah dikirim.', 'success');
+          
+          // Check if in dev mode (no email sent)
+          if (data.dev_mode && data.reset_url) {
+            const hint = document.getElementById('dev-hint');
+            hint.style.display = 'block';
+            hint.innerHTML = `<strong>${t.devModeNotice || 'Mode Pengujian:'}</strong> ${t.smtpNotConfigured || 'SMTP belum dikonfigurasi. Gunakan tautan berikut:'}<br><a href="${data.reset_url}" style="color:#2563eb; font-weight:600;">${data.reset_url}</a>`;
+          }
+        } else {
+          showMsg(data.error || t.requestFailed || 'Gagal memproses permintaan', 'error');
+        }
+      } catch (err) {
+        showMsg(t.networkError || 'Terjadi kesalahan jaringan', 'error');
+      }
+    });
+  </script>
+</body>
+</html>

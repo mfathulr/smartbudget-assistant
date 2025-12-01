@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: financial-advisor
+    name: smartbudget-assistant
     env: python
     region: singapore
     plan: free
@@ -17,6 +17,18 @@ services:
         fromDatabase:
           name: financial-advisor-db
           property: connectionString
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: APP_URL
+        value: https://smartbudget-assistant.onrender.com
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: PORT

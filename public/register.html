@@ -2,50 +2,360 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8" />
-    <title>Register - Financial Assistant</title>
+    <title>Register - SmartBudget Assistant</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script src="/static/app.js"></script>
+    <script src="/static/modals.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
             min-height: 100vh;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%);
+            color: #0b1221;
+            position: relative;
+            overflow-x: hidden;
+        }
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(255,255,255,0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255,255,255,0.04) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        body::after {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            top: -150px;
+            right: -100px;
+            background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: float 8s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-30px, 20px) scale(1.1); }
+        }
+        body::after {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            top: -150px;
+            right: -100px;
+            background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: float 8s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-30px, 20px) scale(1.1); }
+        }
+        .top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.9) 0%, rgba(30, 64, 175, 0.9) 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            text-decoration: none;
+        }
+        .brand-icon-wrapper {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #2d3748;
+            box-shadow: 0 2px 8px rgba(96, 165, 250, 0.3);
+        }
+        .brand-icon-wrapper i {
+            font-size: 16px;
+            color: white;
+        }
+        .brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .brand-name {
+            font-size: 16px;
+            font-weight: 600;
+            line-height: 1;
+            letter-spacing: -0.3px;
+        }
+        .brand-tagline {
+            font-size: 9px;
+            opacity: 0.85;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .language-switcher {
+            display: flex;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .lang-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        .lang-btn.active {
+            background: white;
+            color: #2563eb;
+            box-shadow: 0 1px 4px rgba(255, 255, 255, 0.2);
+        }
+        .lang-btn:not(.active):hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+        .register-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: center;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+        /* Tablet & Mobile Responsive */
+        @media (max-width: 968px) {
+            .register-wrapper {
+                grid-template-columns: 1fr;
+                gap: 32px;
+                margin: 24px auto;
+                padding: 0 20px;
+            }
+            .brand-panel {
+                order: 2;
+                text-align: center;
+                padding: 16px;
+            }
+            .register-container {
+                order: 1;
+            }
+            .brand-title {
+                font-size: 28px;
+                justify-content: center;
+            }
+            .illustration-container {
+                justify-content: center;
+            }
+        }
+        
+        /* Mobile Specific */
+        @media (max-width: 640px) {
+            .top-header {
+                padding: 10px 16px;
+            }
+            .brand-name {
+                font-size: 14px;
+            }
+            .brand-tagline {
+                font-size: 8px;
+            }
+            .lang-btn {
+                padding: 5px 10px;
+                font-size: 10px;
+            }
+            .register-wrapper {
+                margin: 16px auto;
+                padding: 0 16px;
+                gap: 24px;
+            }
+            .register-card {
+                padding: 24px;
+            }
+            .register-header h1 {
+                font-size: 20px;
+            }
+            .brand-title {
+                font-size: 20px;
+            }
+            .icon-circle {
+                width: 60px;
+                height: 60px;
+            }
+            .icon-circle i {
+                font-size: 24px;
+            }
+            .highlight-item {
+                font-size: 13px;
+            }
+        }
+        
+        /* Small Mobile */
+        @media (max-width: 375px) {
+            .brand-text span:last-child {
+                display: none;
+            }
+            .register-card {
+                padding: 20px;
+            }
+            .password-generator-popup {
+                width: 90%;
+                padding: 16px;
+            }
+        }
+        .brand-panel {
+            color: white;
+            padding: 24px;
+            position: relative;
+        }
+        .brand-title {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            animation: fadeInLeft 0.6s ease-out;
+        }
+        .brand-title i {
+            font-size: 42px;
+            color: #60a5fa;
+        }
+        .brand-subtitle {
+            font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 32px;
+            line-height: 1.6;
+            animation: fadeInLeft 0.8s ease-out;
+        }
+        .illustration-container {
+            margin: 32px 0;
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            animation: fadeInLeft 1s ease-out;
+        }
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: #60a5fa;
+            transition: all 0.3s ease;
+        }
+        .icon-circle:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-5px);
+        }
+        .highlights {
+            margin-top: 32px;
+            display: grid;
+            gap: 16px;
+        }
+        .highlight-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0.95;
+            animation: fadeInLeft 1.2s ease-out;
+        }
+        .highlight-item i {
+            color: #93c5fd;
+            font-size: 20px;
+            min-width: 24px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .highlight-item:nth-child(1) { animation-delay: 0.2s; }
+        .highlight-item:nth-child(2) { animation-delay: 0.3s; }
+        .highlight-item:nth-child(3) { animation-delay: 0.4s; }
+        .highlight-item:nth-child(4) { animation-delay: 0.5s; }
+        @keyframes fadeInLeft {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
         }
         .register-container {
             width: 100%;
-            max-width: 420px;
-            padding: 20px;
+            max-width: 540px;
+            position: relative;
+            z-index: 1;
         }
         .register-card {
             background: white;
-            border-radius: 12px;
-            padding: 40px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            border-radius: 16px;
+            padding: 36px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: fadeInUp 0.6s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+        .register-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #2563eb 0%, #7c3aed 100%);
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         .register-header {
             text-align: center;
-            margin-bottom: 32px;
-        }
-        .register-header i {
-            font-size: 48px;
-            color: #2563eb;
-            margin-bottom: 12px;
-            display: block;
+            margin-bottom: 24px;
+            animation: fadeIn 0.8s ease-out;
         }
         .register-header h1 {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 700;
             color: #1f2937;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         .register-header p {
             color: #6b7280;
@@ -53,6 +363,21 @@
         }
         .form-group {
             margin-bottom: 16px;
+            animation: slideIn 0.5s ease-out backwards;
+        }
+        .form-group:nth-child(1) { animation-delay: 0.1s; }
+        .form-group:nth-child(2) { animation-delay: 0.2s; }
+        .form-group:nth-child(3) { animation-delay: 0.3s; }
+        .form-group:nth-child(4) { animation-delay: 0.4s; }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
         label {
             display: block;
@@ -75,11 +400,299 @@
             outline: none;
             border-color: #2563eb;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            transform: scale(1.01);
+            transition: all 0.3s ease;
+        }
+        input {
+            transition: all 0.3s ease;
+        }
+        .password-wrapper {
+            position: relative;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+            transition: color 0.2s ease;
+        }
+        .password-toggle:hover {
+            color: #2563eb;
         }
         .password-strength {
             font-size: 12px;
             margin-top: 4px;
             color: #6b7280;
+        }
+        .password-generator-popup {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            margin-bottom: 8px;
+            padding: 16px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e0e7ff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+            z-index: 100;
+            animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .password-generator-popup.active {
+            display: block;
+        }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-15px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        .password-popup-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .password-popup-hint {
+            font-size: 12px;
+            color: #4b5563;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .password-popup-hint i {
+            color: #667eea;
+            font-size: 14px;
+        }
+        .password-popup-close {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            padding: 4px;
+            font-size: 16px;
+            line-height: 1;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+        }
+        .password-popup-close:hover {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+        .generate-password-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 11px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+            position: relative;
+            overflow: hidden;
+        }
+        .generate-password-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        .generate-password-btn:hover::before {
+            left: 100%;
+        }
+        .generate-password-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.35);
+        }
+        .generate-password-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+        }
+        .generate-password-btn i {
+            font-size: 15px;
+        }
+        .checkbox-wrapper {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .checkbox-wrapper input[type="checkbox"] {
+            width: auto;
+            margin-top: 3px;
+            cursor: pointer;
+        }
+        .checkbox-wrapper label {
+            margin: 0;
+            font-size: 13px;
+            color: #374151;
+            cursor: pointer;
+        }
+        .checkbox-wrapper label a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .checkbox-wrapper label a:hover {
+            text-decoration: underline;
+        }
+        .recaptcha-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 6px 12px;
+            text-align: center;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.5);
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(8px);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            z-index: 1000;
+            line-height: 1.4;
+        }
+        .recaptcha-footer a {
+            color: rgba(147, 197, 253, 0.9);
+            text-decoration: none;
+        }
+        .recaptcha-footer a:hover {
+            color: rgba(147, 197, 253, 1);
+            text-decoration: underline;
+        }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            animation: fadeIn 0.2s ease-out;
+        }
+        .modal-overlay.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 85vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: slideUp 0.3s ease-out;
+        }
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+        }
+        .modal-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.2s ease;
+        }
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            color: #374151;
+            line-height: 1.6;
+        }
+        .modal-body h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .modal-body h3:first-child {
+            margin-top: 0;
+        }
+        .modal-body h4 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-top: 20px;
+            margin-bottom: 8px;
+        }
+        .modal-body h4:first-child {
+            margin-top: 0;
+        }
+        .modal-body p {
+            margin-bottom: 12px;
+        }
+        .modal-body ul {
+            margin-left: 20px;
+            margin-bottom: 16px;
+            list-style-type: disc;
+        }
+        .modal-body li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+        .modal-body strong {
+            color: #1f2937;
+            font-weight: 600;
+        }
+        .modal-body li {
+            margin-bottom: 6px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         .register-btn {
             width: 100%;
@@ -98,9 +711,16 @@
             justify-content: center;
             gap: 8px;
         }
+        .register-btn {
+            animation: slideIn 0.5s ease-out backwards;
+            animation-delay: 0.6s;
+        }
         .register-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+        .register-btn:active:not(:disabled) {
+            transform: translateY(0);
         }
         .register-btn:disabled {
             opacity: 0.5;
@@ -162,46 +782,131 @@
             color: #1e40af;
             text-decoration: underline;
         }
+        .login-link {
+            animation: fadeIn 1s ease-out;
+            animation-delay: 0.8s;
+            animation-fill-mode: backwards;
+        }
+        .checkbox-wrapper {
+            animation: slideIn 0.5s ease-out backwards;
+            animation-delay: 0.5s;
+        }
+        label {
+            animation: fadeIn 0.6s ease-out backwards;
+        }
+        @keyframes bounceIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.3);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.05);
+            }
+            70% {
+                transform: scale(0.9);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        .header-brand {
+            animation: slideInLeft 0.6s ease-out;
+        }
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
         .language-switcher {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            gap: 4px;
+            animation: slideInRight 0.6s ease-out;
         }
-        .lang-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: background 0.2s ease;
-        }
-        .lang-btn.active {
-            background: white;
-            color: #2563eb;
-        }
-        .lang-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
     </style>
 </head>
 <body>
-    <div class="language-switcher">
-        <button class="lang-btn active" id="lang-id" onclick="switchLanguage('id')">ID</button>
-        <button class="lang-btn" id="lang-en" onclick="switchLanguage('en')">EN</button>
-    </div>
-
-    <div class="register-container">
-        <div class="register-card">
-            <div class="register-header">
-                <i class="fas fa-user-plus"></i>
-                <h1 data-i18n="registerTitle">Daftar</h1>
-                <p data-i18n="registerSubtitle">Buat akun baru</p>
+    <header class="top-header">
+        <a href="/" class="header-brand">
+            <div class="brand-icon-wrapper">
+                <i class="fas fa-wallet"></i>
             </div>
+            <div class="brand-text">
+                <span class="brand-name" data-i18n="brandTitle">SmartBudget Assistant</span>
+                <span class="brand-tagline" data-i18n="brandTagline">Your Financial Companion</span>
+            </div>
+        </a>
+        <div class="language-switcher">
+            <button class="lang-btn active" id="lang-id" onclick="setLanguage('id')">ID</button>
+            <button class="lang-btn" id="lang-en" onclick="setLanguage('en')">EN</button>
+        </div>
+    </header>
+
+    <div class="register-wrapper">
+        <!-- Brand Panel -->
+        <div class="brand-panel">
+            <div class="brand-title">
+                <i class="fas fa-wallet"></i>
+                <span data-i18n="welcomeToSmartBudget">Bergabung dengan SmartBudget</span>
+            </div>
+            <p class="brand-subtitle" data-i18n="registerWelcomeMessage">
+                Mulai perjalanan finansial Anda bersama SmartBudget Assistant. Kelola keuangan dengan mudah dan capai tujuan finansial Anda.
+            </p>
+
+            <!-- Icon Illustration -->
+            <div class="illustration-container">
+                <div class="icon-circle">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="icon-circle">
+                    <i class="fas fa-piggy-bank"></i>
+                </div>
+                <div class="icon-circle">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+            </div>
+
+            <!-- Highlights -->
+            <div class="highlights">
+                <div class="highlight-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span data-i18n="feature1">Kelola Keuangan dengan Mudah</span>
+                </div>
+                <div class="highlight-item">
+                    <i class="fas fa-robot"></i>
+                    <span data-i18n="feature2">Analisis Keuangan dengan AI</span>
+                </div>
+                <div class="highlight-item">
+                    <i class="fas fa-bullseye"></i>
+                    <span data-i18n="feature3">Capai Target Tabungan Anda</span>
+                </div>
+                <div class="highlight-item">
+                    <i class="fas fa-lock"></i>
+                    <span data-i18n="feature4">Data Aman & Terenkripsi</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Registration Form -->
+        <div class="register-container">
+            <div class="register-card">
+                <div class="register-header">
+                    <h1 data-i18n="registerTitle">Daftar</h1>
+                    <p data-i18n="registerSubtitle">Buat akun baru</p>
+                </div>
 
             <div id="message" class="message"></div>
 
@@ -218,18 +923,38 @@
 
                 <div class="form-group">
                     <label for="password" data-i18n="passwordLabel">Password</label>
-                    <input type="password" id="password" name="password" placeholder="••••••••" required />
+                    <div class="password-wrapper">
+                        <input type="password" id="password" name="password" placeholder="••••••••" required />
+                        <button type="button" class="password-toggle" onclick="togglePassword('password')">
+                            <i class="fas fa-eye" id="password-icon"></i>
+                        </button>
+                    </div>
                     <div class="password-strength" id="password-strength"></div>
                 </div>
 
                 <div class="form-group">
                     <label for="confirm-password" data-i18n="confirmPasswordLabel">Konfirmasi Password</label>
-                    <input type="password" id="confirm-password" name="confirm-password" placeholder="••••••••" required />
+                    <div class="password-wrapper">
+                        <input type="password" id="confirm-password" name="confirm-password" placeholder="••••••••" required />
+                        <button type="button" class="password-toggle" onclick="togglePassword('confirm-password')">
+                            <i class="fas fa-eye" id="confirm-password-icon"></i>
+                        </button>
+                    </div>
                 </div>
 
-                <button type="submit" class="register-btn" id="btn-register" data-i18n="registerButton">
+                <div class="checkbox-wrapper">
+                    <input type="checkbox" id="agree-terms" required />
+                    <label for="agree-terms">
+                        <span data-i18n="agreeTermsPrefix">Saya setuju dengan</span>
+                        <a href="#" onclick="openModal('terms'); return false;" data-i18n="termsLink">Syarat & Ketentuan</a>
+                        <span data-i18n="agreeTermsAnd">dan</span>
+                        <a href="#" onclick="openModal('privacy'); return false;" data-i18n="privacyLink">Kebijakan Privasi</a>
+                    </label>
+                </div>
+
+                <button type="submit" class="register-btn" id="btn-register">
                     <i class="fas fa-user-check"></i>
-                    <span>Daftar</span>
+                    <span data-i18n="registerButton">Daftar</span>
                 </button>
             </form>
 
@@ -238,73 +963,625 @@
             </div>
 
             <div class="login-link">
-                <a href="/login.html" data-i18n="loginLink">Login di sini</a>
+                <a href="/login.html" data-i18n="loginLinkText">Login di sini</a>
+            </div>
             </div>
         </div>
     </div>
 
+    <!-- Terms Modal -->
+    <div id="terms-modal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'terms')">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 data-i18n="termsModalTitle">Syarat & Ketentuan</h2>
+                <button class="modal-close" onclick="closeModal('terms')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="terms-content">
+                <!-- Content will be populated by JS based on language -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Modal -->
+    <div id="privacy-modal" class="modal-overlay" onclick="closeModalOnOverlay(event, 'privacy')">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h2 data-i18n="privacyModalTitle">Kebijakan Privasi</h2>
+                <button class="modal-close" onclick="closeModal('privacy')"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="privacy-content">
+                <!-- Content will be populated by JS based on language -->
+            </div>
+        </div>
+    </div>
+
+    <!-- OTP Verification Modal -->
+    <div id="otp-modal" class="modal-overlay">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2 data-i18n="otpModalTitle">Verifikasi Email</h2>
+                <button class="modal-close" onclick="closeOtpModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <div style="margin-bottom: 20px;">
+                    <i class="fas fa-envelope" style="font-size: 48px; color: #2563eb; margin-bottom: 16px;"></i>
+                    <p data-i18n="otpSentMessage" style="color: #374151; margin-bottom: 8px;">Kami telah mengirim kode verifikasi ke email Anda</p>
+                    <p id="otp-email" style="color: #2563eb; font-weight: 600; margin-bottom: 20px;"></p>
+                </div>
+                
+                <div id="otp-message" class="message" style="display: none;"></div>
+                
+                <form id="otp-form" onsubmit="verifyOTP(event)">
+                    <div class="form-group" style="text-align: left;">
+                        <label for="otp-code" data-i18n="otpCodeLabel">Kode Verifikasi (6 digit)</label>
+                        <input 
+                            type="text" 
+                            id="otp-code" 
+                            maxlength="6" 
+                            pattern="[0-9]{6}" 
+                            placeholder="000000"
+                            required 
+                            style="text-align: center; font-size: 24px; letter-spacing: 8px; font-family: 'Courier New', monospace;"
+                        />
+                    </div>
+                    
+                    <button type="submit" class="register-btn" id="btn-verify-otp" style="margin-top: 16px;">
+                        <i class="fas fa-check-circle"></i>
+                        <span data-i18n="verifyButton">Verifikasi</span>
+                    </button>
+                    
+                    <div style="margin-top: 16px; font-size: 13px; color: #6b7280;">
+                        <span data-i18n="otpNotReceived">Tidak menerima kode?</span>
+                        <button type="button" id="resend-otp-btn" onclick="resendOTP()" style="background: none; border: none; color: #2563eb; font-weight: 600; cursor: pointer; text-decoration: underline;" data-i18n="resendOtpButton">Kirim Ulang</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     <script>
-        // Translations
-        const translations = {
-            id: {
-                registerTitle: 'Daftar',
-                registerSubtitle: 'Buat akun baru',
-                fullNameLabel: 'Nama Lengkap',
-                emailLabel: 'Email',
-                passwordLabel: 'Password',
-                confirmPasswordLabel: 'Konfirmasi Password',
-                registerButton: 'Daftar',
-                alreadyHaveAccount: 'Sudah punya akun?',
-                loginLink: 'Login di sini',
-                registrationSuccess: 'Pendaftaran berhasil! Mengalihkan ke login...',
-                passwordMismatch: 'Password tidak cocok',
-                passwordTooShort: 'Password minimal 6 karakter',
-                emailAlreadyExists: 'Email sudah terdaftar',
-                registrationFailed: 'Pendaftaran gagal',
-                errorOccurred: 'Terjadi kesalahan',
-                passwordWeak: 'Lemah',
-                passwordFair: 'Sedang',
-                passwordStrong: 'Kuat'
-            },
-            en: {
-                registerTitle: 'Register',
-                registerSubtitle: 'Create new account',
-                fullNameLabel: 'Full Name',
-                emailLabel: 'Email',
-                passwordLabel: 'Password',
-                confirmPasswordLabel: 'Confirm Password',
-                registerButton: 'Register',
-                alreadyHaveAccount: 'Already have an account?',
-                loginLink: 'Login here',
-                registrationSuccess: 'Registration successful! Redirecting to login...',
-                passwordMismatch: 'Passwords do not match',
-                passwordTooShort: 'Password must be at least 6 characters',
-                emailAlreadyExists: 'Email already registered',
-                registrationFailed: 'Registration failed',
-                errorOccurred: 'An error occurred',
-                passwordWeak: 'Weak',
-                passwordFair: 'Fair',
-                passwordStrong: 'Strong'
-            }
-        };
-
         let currentLanguage = localStorage.getItem('language') || 'id';
+        let recaptchaConfig = { enabled: false, siteKey: null };
 
-        function switchLanguage(lang) {
-            currentLanguage = lang;
-            localStorage.setItem('language', lang);
-            document.getElementById('lang-id').classList.toggle('active', lang === 'id');
-            document.getElementById('lang-en').classList.toggle('active', lang === 'en');
-            updateLanguage();
+        function updateModalContent(type) {
+            if (window.updateModalContent) {
+                window.updateModalContent(type);
+            }
         }
 
-        function updateLanguage() {
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const key = el.getAttribute('data-i18n');
-                el.textContent = translations[currentLanguage][key] || key;
+        function openModal(type) {
+            // Get or create modal overlay
+            let modalOverlay = document.getElementById('terms-privacy-modal');
+            
+            if (!modalOverlay) {
+                // Create modal if it doesn't exist
+                modalOverlay = document.createElement('div');
+                modalOverlay.id = 'terms-privacy-modal';
+                modalOverlay.className = 'modal-overlay';
+                modalOverlay.innerHTML = `
+                    <div class="modal-content" onclick="event.stopPropagation()">
+                        <div class="modal-header">
+                            <h3 id="modal-title"></h3>
+                            <button class="modal-close" onclick="closeModal()">&times;</button>
+                        </div>
+                        <div class="modal-body" id="modal-body"></div>
+                    </div>
+                `;
+                document.body.appendChild(modalOverlay);
+                
+                // Close modal when clicking overlay
+                modalOverlay.addEventListener('click', closeModal);
+            }
+            
+            // Update content based on type
+            const titleEl = document.getElementById('modal-title');
+            const bodyEl = document.getElementById('modal-body');
+            
+            if (type === 'terms') {
+                titleEl.textContent = translations[currentLanguage].termsTitle || 'Syarat & Ketentuan';
+                bodyEl.innerHTML = getTermsContent();
+            } else if (type === 'privacy') {
+                titleEl.textContent = translations[currentLanguage].privacyTitle || 'Kebijakan Privasi';
+                bodyEl.innerHTML = getPrivacyContent();
+            }
+            
+            // Show modal
+            modalOverlay.classList.add('active');
+        }
+
+        function closeModal() {
+            const modalOverlay = document.getElementById('terms-privacy-modal');
+            if (modalOverlay) {
+                modalOverlay.classList.remove('active');
+            }
+        }
+
+        function getTermsContent() {
+            if (currentLanguage === 'en') {
+                return `
+                    <h3>1. Acceptance of Terms</h3>
+                    <p>By accessing and using SmartBudget Assistant, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our service.</p>
+                    
+                    <h3>2. Service Description</h3>
+                    <p>SmartBudget Assistant is a personal financial management application that helps you:</p>
+                    <ul>
+                        <li>Record and track daily financial transactions</li>
+                        <li>Manage accounts and financial balances</li>
+                        <li>Set and monitor savings goals</li>
+                        <li>Receive financial analysis and advice through AI</li>
+                    </ul>
+                    
+                    <h3>3. User Account</h3>
+                    <p>You are responsible for:</p>
+                    <ul>
+                        <li>Maintaining the confidentiality of your account password</li>
+                        <li>All activities that occur under your account</li>
+                        <li>Providing accurate and current information</li>
+                        <li>Notifying us immediately of any unauthorized use of your account</li>
+                    </ul>
+                    
+                    <h3>4. Use of Service</h3>
+                    <p>You agree to:</p>
+                    <ul>
+                        <li>Use the service only for lawful and legal purposes</li>
+                        <li>Not use the service for fraudulent or illegal activities</li>
+                        <li>Not interfere with or damage the service or servers</li>
+                        <li>Not attempt to access other users' accounts without permission</li>
+                    </ul>
+                    
+                    <h3>5. Data and Privacy</h3>
+                    <p>Your financial data belongs to you. We are committed to protecting your privacy in accordance with our Privacy Policy. We will not sell or share your personal data with third parties without your consent.</p>
+                    
+                    <h3>6. AI Advice and Recommendations</h3>
+                    <p>Financial advice provided by AI is for general informational purposes only and should not be considered professional financial advice. You should consult with a qualified financial advisor for important financial decisions.</p>
+                    
+                    <h3>7. Limitation of Liability</h3>
+                    <p>SmartBudget Assistant is provided "as is". We are not responsible for:</p>
+                    <ul>
+                        <li>Financial losses arising from use of the service</li>
+                        <li>Accuracy of advice or analysis provided</li>
+                        <li>Service interruptions or data loss</li>
+                        <li>Damage caused by viruses or malware</li>
+                    </ul>
+                    
+                    <h3>8. Service Changes</h3>
+                    <p>We reserve the right to modify or discontinue the service (or any part of the service) at any time with or without notice. We are not liable to you or any third party for any modification, suspension, or discontinuation of the service.</p>
+                    
+                    <h3>9. Changes to Terms</h3>
+                    <p>We may update these Terms and Conditions from time to time. We will notify you of significant changes via email or in-app notification. Continued use of the service after changes means you accept the updated terms.</p>
+                    
+                    <h3>10. Contact</h3>
+                    <p>If you have questions about these Terms and Conditions, please contact us via email or the contact form available in the application.</p>
+                    
+                    <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">Last updated: December 2, 2025</p>
+                `;
+            }
+            return `
+                <h3>1. Penerimaan Syarat</h3>
+                <p>Dengan mengakses dan menggunakan SmartBudget Assistant, Anda menyetujui untuk terikat oleh Syarat dan Ketentuan ini. Jika Anda tidak setuju dengan syarat ini, mohon untuk tidak menggunakan layanan kami.</p>
+                
+                <h3>2. Deskripsi Layanan</h3>
+                <p>SmartBudget Assistant adalah aplikasi manajemen keuangan pribadi yang membantu Anda:</p>
+                <ul>
+                    <li>Mencatat dan melacak transaksi keuangan harian</li>
+                    <li>Mengelola akun dan saldo keuangan</li>
+                    <li>Menetapkan dan memantau target tabungan</li>
+                    <li>Mendapatkan analisis dan saran keuangan melalui AI</li>
+                </ul>
+                
+                <h3>3. Akun Pengguna</h3>
+                <p>Anda bertanggung jawab untuk:</p>
+                <ul>
+                    <li>Menjaga kerahasiaan kata sandi akun Anda</li>
+                    <li>Semua aktivitas yang terjadi di bawah akun Anda</li>
+                    <li>Memberikan informasi yang akurat dan terkini</li>
+                    <li>Memberi tahu kami segera jika ada penggunaan tidak sah atas akun Anda</li>
+                </ul>
+                
+                <h3>4. Penggunaan Layanan</h3>
+                <p>Anda setuju untuk:</p>
+                <ul>
+                    <li>Menggunakan layanan hanya untuk tujuan yang sah dan legal</li>
+                    <li>Tidak menggunakan layanan untuk aktivitas penipuan atau ilegal</li>
+                    <li>Tidak mengganggu atau merusak layanan atau server</li>
+                    <li>Tidak mencoba mengakses akun pengguna lain tanpa izin</li>
+                </ul>
+                
+                <h3>5. Data dan Privasi</h3>
+                <p>Data keuangan Anda adalah milik Anda. Kami berkomitmen untuk melindungi privasi Anda sesuai dengan Kebijakan Privasi kami. Kami tidak akan menjual atau membagikan data pribadi Anda kepada pihak ketiga tanpa persetujuan Anda.</p>
+                
+                <h3>6. Saran dan Rekomendasi AI</h3>
+                <p>Saran keuangan yang diberikan oleh AI adalah untuk tujuan informasi umum saja dan tidak boleh dianggap sebagai nasihat keuangan profesional. Anda harus berkonsultasi dengan penasihat keuangan yang berkualifikasi untuk keputusan keuangan penting.</p>
+                
+                <h3>7. Pembatasan Tanggung Jawab</h3>
+                <p>SmartBudget Assistant disediakan "sebagaimana adanya". Kami tidak bertanggung jawab atas:</p>
+                <ul>
+                    <li>Kerugian finansial yang timbul dari penggunaan layanan</li>
+                    <li>Keakuratan saran atau analisis yang diberikan</li>
+                    <li>Gangguan layanan atau kehilangan data</li>
+                    <li>Kerusakan yang disebabkan oleh virus atau malware</li>
+                </ul>
+                
+                <h3>8. Perubahan Layanan</h3>
+                <p>Kami berhak untuk memodifikasi atau menghentikan layanan (atau bagian dari layanan) kapan saja dengan atau tanpa pemberitahuan. Kami tidak bertanggung jawab kepada Anda atau pihak ketiga atas modifikasi, penangguhan, atau penghentian layanan.</p>
+                
+                <h3>9. Perubahan Syarat</h3>
+                <p>Kami dapat memperbarui Syarat dan Ketentuan ini dari waktu ke waktu. Kami akan memberi tahu Anda tentang perubahan signifikan melalui email atau pemberitahuan di aplikasi. Penggunaan berkelanjutan atas layanan setelah perubahan berarti Anda menerima syarat yang diperbarui.</p>
+                
+                <h3>10. Kontak</h3>
+                <p>Jika Anda memiliki pertanyaan tentang Syarat dan Ketentuan ini, silakan hubungi kami melalui email atau formulir kontak yang tersedia di aplikasi.</p>
+                
+                <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">Terakhir diperbarui: 2 Desember 2025</p>
+            `;
+        }
+
+        function getPrivacyContent() {
+            if (currentLanguage === 'en') {
+                return `
+                    <h3>1. Information We Collect</h3>
+                    <p>We collect the following information to provide our service:</p>
+                    <ul>
+                        <li><strong>Account Information:</strong> Name, email address, and password (encrypted)</li>
+                        <li><strong>Financial Data:</strong> Transactions, account balances, expense categories, savings goals</li>
+                        <li><strong>Usage Data:</strong> How you use the application, features accessed</li>
+                        <li><strong>Technical Data:</strong> IP address, browser type, operating system, access logs</li>
+                    </ul>
+                    
+                    <h3>2. How We Use Your Information</h3>
+                    <p>We use your information to:</p>
+                    <ul>
+                        <li>Provide and maintain the SmartBudget Assistant service</li>
+                        <li>Deliver personalized financial analysis and advice</li>
+                        <li>Improve and optimize user experience</li>
+                        <li>Send important notifications related to your account</li>
+                        <li>Detect and prevent fraudulent activities or abuse</li>
+                        <li>Comply with legal obligations</li>
+                    </ul>
+                    
+                    <h3>3. Data Storage and Security</h3>
+                    <p>We implement security measures to protect your data:</p>
+                    <ul>
+                        <li>Encryption of sensitive data (passwords, financial information)</li>
+                        <li>Secure HTTPS connections</li>
+                        <li>Limited access to your personal data</li>
+                        <li>Regular security monitoring</li>
+                        <li>Regular data backups to prevent data loss</li>
+                    </ul>
+                    <p>Your data is stored on secure servers and only accessed by authorized personnel.</p>
+                    
+                    <h3>4. Sharing Information with Third Parties</h3>
+                    <p>We DO NOT sell your personal data. We only share information in the following situations:</p>
+                    <ul>
+                        <li><strong>Service Providers:</strong> Partners who help operate our service (hosting, analytics) under confidentiality agreements</li>
+                        <li><strong>Legal Compliance:</strong> If required by law or to protect our rights</li>
+                        <li><strong>With Your Consent:</strong> In other cases, we will ask for your explicit consent</li>
+                    </ul>
+                    
+                    <h3>5. AI and Machine Learning Usage</h3>
+                    <p>We use AI technology to provide financial advice. Your data may be used to:</p>
+                    <ul>
+                        <li>Generate personalized analysis and recommendations</li>
+                        <li>Improve the accuracy of our AI models (data is anonymized)</li>
+                    </ul>
+                    <p>We use third-party services (OpenAI, Google AI) that have their own privacy policies. Data sent to these services does not include personally identifiable information.</p>
+                    
+                    <h3>6. Cookies and Tracking Technologies</h3>
+                    <p>We use cookies and similar technologies to:</p>
+                    <ul>
+                        <li>Maintain your login session</li>
+                        <li>Remember your preferences (language, settings)</li>
+                        <li>Analyze application usage</li>
+                    </ul>
+                    <p>You can manage cookie preferences through your browser settings.</p>
+                    
+                    <h3>7. Your Rights</h3>
+                    <p>You have the right to:</p>
+                    <ul>
+                        <li><strong>Access:</strong> Request a copy of your personal data</li>
+                        <li><strong>Correction:</strong> Update or correct inaccurate information</li>
+                        <li><strong>Deletion:</strong> Request deletion of your account and data</li>
+                        <li><strong>Portability:</strong> Export your data in a machine-readable format</li>
+                        <li><strong>Objection:</strong> Object to certain data processing</li>
+                    </ul>
+                    <p>To exercise these rights, please contact us through account settings or email.</p>
+                    
+                    <h3>8. Data Retention</h3>
+                    <p>We retain your data as long as your account is active or as needed to provide services. After account deletion, your data will be permanently deleted within 30 days, unless required by law to retain it longer.</p>
+                    
+                    <h3>9. Children's Privacy</h3>
+                    <p>Our service is not directed to children under the age of 13. We do not knowingly collect personal information from children. If you become aware that your child has provided us with personal information, please contact us.</p>
+                    
+                    <h3>10. Privacy Policy Changes</h3>
+                    <p>We may update this Privacy Policy from time to time. We will notify you of significant changes via email or in-app notification. The "Last updated" date at the bottom indicates when this policy was last modified.</p>
+                    
+                    <h3>11. Contact</h3>
+                    <p>If you have questions, concerns, or privacy-related requests, please contact us:</p>
+                    <ul>
+                        <li>Through the contact form in the application</li>
+                        <li>Email: smartbudgetassistent@gmail.com</li>
+                    </ul>
+                    
+                    <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">Last updated: December 2, 2025</p>
+                `;
+            }
+            return `
+                <h3>1. Informasi yang Kami Kumpulkan</h3>
+                <p>Kami mengumpulkan informasi berikut untuk menyediakan layanan kami:</p>
+                <ul>
+                    <li><strong>Informasi Akun:</strong> Nama, alamat email, dan kata sandi (terenkripsi)</li>
+                    <li><strong>Data Keuangan:</strong> Transaksi, saldo akun, kategori pengeluaran, target tabungan</li>
+                    <li><strong>Data Penggunaan:</strong> Cara Anda menggunakan aplikasi, fitur yang diakses</li>
+                    <li><strong>Data Teknis:</strong> Alamat IP, jenis browser, sistem operasi, log akses</li>
+                </ul>
+                
+                <h3>2. Bagaimana Kami Menggunakan Informasi Anda</h3>
+                <p>Kami menggunakan informasi Anda untuk:</p>
+                <ul>
+                    <li>Menyediakan dan memelihara layanan SmartBudget Assistant</li>
+                    <li>Memberikan analisis dan saran keuangan yang dipersonalisasi</li>
+                    <li>Meningkatkan dan mengoptimalkan pengalaman pengguna</li>
+                    <li>Mengirim notifikasi penting terkait akun Anda</li>
+                    <li>Mendeteksi dan mencegah aktivitas penipuan atau penyalahgunaan</li>
+                    <li>Mematuhi kewajiban hukum</li>
+                </ul>
+                
+                <h3>3. Penyimpanan dan Keamanan Data</h3>
+                <p>Kami menerapkan langkah-langkah keamanan untuk melindungi data Anda:</p>
+                <ul>
+                    <li>Enkripsi data sensitif (kata sandi, informasi keuangan)</li>
+                    <li>Koneksi HTTPS yang aman</li>
+                    <li>Akses terbatas ke data pribadi Anda</li>
+                    <li>Pemantauan keamanan secara berkala</li>
+                    <li>Backup data reguler untuk mencegah kehilangan data</li>
+                </ul>
+                <p>Data Anda disimpan di server yang aman dan hanya diakses oleh personel yang berwenang.</p>
+                
+                <h3>4. Berbagi Informasi dengan Pihak Ketiga</h3>
+                <p>Kami TIDAK menjual data pribadi Anda. Kami hanya membagikan informasi dalam situasi berikut:</p>
+                <ul>
+                    <li><strong>Penyedia Layanan:</strong> Partner yang membantu mengoperasikan layanan kami (hosting, analitik) dengan perjanjian kerahasiaan</li>
+                    <li><strong>Kepatuhan Hukum:</strong> Jika diwajibkan oleh hukum atau untuk melindungi hak kami</li>
+                    <li><strong>Dengan Persetujuan Anda:</strong> Dalam kasus lain, kami akan meminta persetujuan eksplisit Anda</li>
+                </ul>
+                
+                <h3>5. Penggunaan AI dan Pembelajaran Mesin</h3>
+                <p>Kami menggunakan teknologi AI untuk memberikan saran keuangan. Data Anda dapat digunakan untuk:</p>
+                <ul>
+                    <li>Menghasilkan analisis dan rekomendasi yang dipersonalisasi</li>
+                    <li>Meningkatkan akurasi model AI kami (data dianonimkan)</li>
+                </ul>
+                <p>Kami menggunakan layanan pihak ketiga (OpenAI, Google AI) yang memiliki kebijakan privasi sendiri. Data yang dikirim ke layanan ini tidak menyertakan informasi identitas pribadi.</p>
+                
+                <h3>6. Cookies dan Teknologi Pelacakan</h3>
+                <p>Kami menggunakan cookies dan teknologi serupa untuk:</p>
+                <ul>
+                    <li>Menjaga sesi login Anda</li>
+                    <li>Mengingat preferensi Anda (bahasa, pengaturan)</li>
+                    <li>Menganalisis penggunaan aplikasi</li>
+                </ul>
+                <p>Anda dapat mengelola preferensi cookies melalui pengaturan browser Anda.</p>
+                
+                <h3>7. Hak Anda</h3>
+                <p>Anda memiliki hak untuk:</p>
+                <ul>
+                    <li><strong>Akses:</strong> Meminta salinan data pribadi Anda</li>
+                    <li><strong>Koreksi:</strong> Memperbarui atau memperbaiki informasi yang tidak akurat</li>
+                    <li><strong>Penghapusan:</strong> Meminta penghapusan akun dan data Anda</li>
+                    <li><strong>Portabilitas:</strong> Mengekspor data Anda dalam format yang dapat dibaca mesin</li>
+                    <li><strong>Keberatan:</strong> Menolak pemrosesan data tertentu</li>
+                </ul>
+                <p>Untuk menggunakan hak-hak ini, silakan hubungi kami melalui pengaturan akun atau email.</p>
+                
+                <h3>8. Penyimpanan Data</h3>
+                <p>Kami menyimpan data Anda selama akun Anda aktif atau sepanjang diperlukan untuk menyediakan layanan. Setelah penghapusan akun, data Anda akan dihapus secara permanen dalam waktu 30 hari, kecuali jika diwajibkan oleh hukum untuk menyimpannya lebih lama.</p>
+                
+                <h3>9. Privasi Anak-anak</h3>
+                <p>Layanan kami tidak ditujukan untuk anak-anak di bawah usia 13 tahun. Kami tidak dengan sengaja mengumpulkan informasi pribadi dari anak-anak. Jika Anda mengetahui bahwa anak Anda telah memberikan informasi pribadi kepada kami, silakan hubungi kami.</p>
+                
+                <h3>10. Perubahan Kebijakan Privasi</h3>
+                <p>Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Kami akan memberi tahu Anda tentang perubahan signifikan melalui email atau pemberitahuan di aplikasi. Tanggal "Terakhir diperbarui" di bagian bawah menunjukkan kapan kebijakan ini terakhir diubah.</p>
+                
+                <h3>11. Kontak</h3>
+                <p>Jika Anda memiliki pertanyaan, kekhawatiran, atau permintaan terkait privasi, silakan hubungi kami:</p>
+                <ul>
+                    <li>Melalui formulir kontak di aplikasi</li>
+                    <li>Email: smartbudgetassistent@gmail.com</li>
+                </ul>
+                
+                <p style="margin-top: 20px; font-size: 12px; color: #6b7280;">Terakhir diperbarui: 2 Desember 2025</p>
+            `;
+        }
+
+        // Initialize reCAPTCHA
+        async function initRecaptcha() {
+            // reCAPTCHA temporarily disabled
+            // try {
+            //     const response = await fetch('/api/public-config');
+            //     const config = await response.json();
+            //     
+            //     if (config.recaptcha_site_key) {
+            //         recaptchaConfig = {
+            //             enabled: true,
+            //             siteKey: config.recaptcha_site_key
+            //         };
+            //         
+            //         // Load reCAPTCHA script
+            //         const script = document.createElement('script');
+            //         script.src = `https://www.google.com/recaptcha/api.js?render=${config.recaptcha_site_key}`;
+            //         document.head.appendChild(script);
+            //     }
+            // } catch (error) {
+            //     console.log('reCAPTCHA config not available');
+            // }
+        }
+
+        async function getRecaptchaToken() {
+            if (!recaptchaConfig.enabled) return null;
+            try {
+                return await grecaptcha.execute(recaptchaConfig.siteKey, { action: 'register' });
+            } catch (error) {
+                console.error('reCAPTCHA error:', error);
+                return null;
+            }
+        }
+
+        function togglePassword(fieldId) {
+            const field = document.getElementById(fieldId);
+            const icon = document.getElementById(fieldId + '-icon');
+            if (field.type === 'password') {
+                field.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                field.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        }
+
+        let passwordPopup = null;
+        let isUserTyping = false;
+
+        function showPasswordGenerator() {
+            const passwordField = document.getElementById('password');
+            
+            // Only show if password field is empty or hasn't been typed in
+            if (passwordField.value.length > 0 && isUserTyping) {
+                return;
+            }
+            
+            // Create popup if it doesn't exist
+            if (!passwordPopup) {
+                const passwordWrapper = document.querySelector('.password-wrapper');
+                passwordPopup = document.createElement('div');
+                passwordPopup.className = 'password-generator-popup';
+                passwordPopup.innerHTML = `
+                    <div class="password-popup-header">
+                        <div class="password-popup-hint">
+                            <i class="fas fa-lightbulb"></i>
+                            <span data-i18n="generatePasswordHint">Butuh password yang kuat?</span>
+                        </div>
+                        <button type="button" class="password-popup-close" onclick="hidePasswordGenerator()" title="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <button type="button" class="generate-password-btn" onclick="generateStrongPassword()">
+                        <i class="fas fa-key"></i>
+                        <span data-i18n="generatePassword">Buat Password Kuat</span>
+                    </button>
+                `;
+                passwordWrapper.appendChild(passwordPopup);
+                
+                // Apply translations
+                const hintEl = passwordPopup.querySelector('[data-i18n="generatePasswordHint"]');
+                const btnEl = passwordPopup.querySelector('[data-i18n="generatePassword"]');
+                if (translations[currentLanguage]) {
+                    if (translations[currentLanguage].generatePasswordHint) {
+                        hintEl.textContent = translations[currentLanguage].generatePasswordHint;
+                    }
+                    if (translations[currentLanguage].generatePassword) {
+                        btnEl.textContent = translations[currentLanguage].generatePassword;
+                    }
+                }
+            }
+            
+            passwordPopup.classList.add('active');
+        }
+
+        function hidePasswordGenerator() {
+            if (passwordPopup) {
+                passwordPopup.classList.remove('active');
+            }
+        }
+
+        function generateStrongPassword() {
+            const length = 14;
+            const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+            const numbers = '0123456789';
+            const symbols = '!@#$%^&*';
+            const allChars = uppercase + lowercase + numbers + symbols;
+            
+            let password = '';
+            // Ensure at least one character from each category
+            password += uppercase[Math.floor(Math.random() * uppercase.length)];
+            password += lowercase[Math.floor(Math.random() * lowercase.length)];
+            password += numbers[Math.floor(Math.random() * numbers.length)];
+            password += symbols[Math.floor(Math.random() * symbols.length)];
+            
+            // Fill the rest randomly
+            for (let i = password.length; i < length; i++) {
+                password += allChars[Math.floor(Math.random() * allChars.length)];
+            }
+            
+            // Shuffle the password
+            password = password.split('').sort(() => Math.random() - 0.5).join('');
+            
+            // Fill both password fields
+            const passwordField = document.getElementById('password');
+            const confirmPasswordField = document.getElementById('confirm-password');
+            passwordField.value = password;
+            confirmPasswordField.value = password;
+            
+            // Mark as generated (not user typed)
+            isUserTyping = false;
+            
+            // Trigger password strength check (without hiding popup)
+            const inputEvent = new Event('input');
+            inputEvent.generatedPassword = true;
+            passwordField.dispatchEvent(inputEvent);
+            
+            // Hide popup
+            hidePasswordGenerator();
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(password).then(() => {
+                showMessage(translations[currentLanguage].passwordCopied, 'success');
+            }).catch(() => {
+                showMessage(translations[currentLanguage].passwordCopied, 'success');
             });
-            document.getElementById('btn-register').innerHTML = `<i class="fas fa-user-check"></i><span>${translations[currentLanguage].registerButton}</span>`;
         }
+
+        // Show popup when password field is focused or clicked
+        document.addEventListener('DOMContentLoaded', () => {
+            const passwordField = document.getElementById('password');
+            
+            // Show popup on focus/click only if field is empty
+            passwordField.addEventListener('focus', () => {
+                if (passwordField.value.length === 0) {
+                    isUserTyping = false;
+                    showPasswordGenerator();
+                }
+            });
+            
+            passwordField.addEventListener('click', () => {
+                if (passwordField.value.length === 0) {
+                    isUserTyping = false;
+                    showPasswordGenerator();
+                }
+            });
+            
+            // Hide popup when user starts typing
+            passwordField.addEventListener('input', (e) => {
+                if (e.target.value.length > 0) {
+                    isUserTyping = true;
+                    hidePasswordGenerator();
+                } else {
+                    // Show popup again if field becomes empty
+                    isUserTyping = false;
+                    if (document.activeElement === passwordField) {
+                        showPasswordGenerator();
+                    }
+                }
+            });
+            
+            // Hide popup when clicking outside
+            document.addEventListener('click', (e) => {
+                const passwordWrapper = document.querySelector('.password-wrapper');
+                if (passwordWrapper && !passwordWrapper.contains(e.target)) {
+                    hidePasswordGenerator();
+                }
+            });
+        });
 
         function showMessage(message, type) {
             const messageEl = document.getElementById('message');
@@ -313,6 +1590,7 @@
         }
 
         function checkPasswordStrength(password) {
+            if (!password) return '';
             let strength = 0;
             if (password.length >= 8) strength++;
             if (password.length >= 12) strength++;
@@ -333,8 +1611,12 @@
 
         document.getElementById('password').addEventListener('input', (e) => {
             const strength = checkPasswordStrength(e.target.value);
-            document.getElementById('password-strength').textContent = strength ? `Kekuatan: ${strength}` : '';
+            const strengthEl = document.getElementById('password-strength');
+            strengthEl.textContent = strength ? `${translations[currentLanguage].passwordStrengthLabel}: ${strength}` : '';
         });
+
+        // Store temp registration data
+        let tempRegData = {};
 
         async function handleRegister(e) {
             e.preventDefault();
@@ -342,11 +1624,17 @@
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirm-password').value;
+            const agreeTerms = document.getElementById('agree-terms').checked;
             const btn = document.getElementById('btn-register');
 
             // Validasi
             if (!name || !email || !password) {
                 showMessage(translations[currentLanguage].errorOccurred, 'error');
+                return;
+            }
+
+            if (!agreeTerms) {
+                showMessage(translations[currentLanguage].termsRequired, 'error');
                 return;
             }
 
@@ -361,23 +1649,38 @@
             }
 
             btn.disabled = true;
+            showMessage(translations[currentLanguage].sendingOtp, 'info');
 
             try {
-                const response = await fetch('/api/register', {
+                // Get reCAPTCHA token if enabled
+                const captchaToken = await getRecaptchaToken();
+                
+                const requestBody = { name, email, password };
+                if (captchaToken) {
+                    requestBody.captchaToken = captchaToken;
+                }
+
+                const response = await fetch(`/api/register/send-otp?lang=${currentLanguage}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ name, email, password })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const data = await response.json();
 
                 if (response.ok) {
-                    showMessage(translations[currentLanguage].registrationSuccess, 'success');
-                    setTimeout(() => {
-                        window.location.href = '/login.html';
-                    }, 1500);
+                    // Store registration data temporarily
+                    tempRegData = { name, email, password };
+                    
+                    // Show OTP modal
+                    document.getElementById('otp-email').textContent = email;
+                    document.getElementById('otp-code').value = '';
+                    document.getElementById('otp-modal').classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                    
+                    showMessage(''); // Clear message
                 } else {
                     showMessage(data.error || translations[currentLanguage].registrationFailed, 'error');
                 }
@@ -389,11 +1692,134 @@
             }
         }
 
-        // Update language on load
+        async function verifyOTP(e) {
+            e.preventDefault();
+            const otpCode = document.getElementById('otp-code').value.trim();
+            const btn = document.getElementById('btn-verify-otp');
+            const otpMessage = document.getElementById('otp-message');
+
+            if (otpCode.length !== 6 || !/^\d+$/.test(otpCode)) {
+                showOtpMessage(translations[currentLanguage].otpInvalidError, 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            showOtpMessage(translations[currentLanguage].otpVerifyingMessage, 'info');
+
+            try {
+                const response = await fetch(`/api/register/verify-otp?lang=${currentLanguage}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: tempRegData.email,
+                        otp: otpCode
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showOtpMessage(translations[currentLanguage].otpVerificationSuccess, 'success');
+                    setTimeout(() => {
+                        closeOtpModal();
+                        showMessage(translations[currentLanguage].registrationSuccess, 'success');
+                        setTimeout(() => {
+                            window.location.href = '/login.html';
+                        }, 1500);
+                    }, 1000);
+                } else {
+                    if (data.error?.includes('expired') || data.error?.includes('kedaluwarsa')) {
+                        showOtpMessage(translations[currentLanguage].otpExpiredError, 'error');
+                    } else {
+                        showOtpMessage(data.error || translations[currentLanguage].otpInvalidError, 'error');
+                    }
+                    document.getElementById('otp-code').value = '';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showOtpMessage(translations[currentLanguage].errorOccurred, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function resendOTP() {
+            const btn = document.getElementById('resend-otp-btn');
+            btn.disabled = true;
+            showOtpMessage(translations[currentLanguage].sendingOtp, 'info');
+
+            try {
+                const captchaToken = await getRecaptchaToken();
+                const requestBody = { ...tempRegData };
+                if (captchaToken) {
+                    requestBody.captchaToken = captchaToken;
+                }
+
+                const response = await fetch(`/api/register/send-otp?lang=${currentLanguage}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showOtpMessage(translations[currentLanguage].otpSentSuccess, 'success');
+                    document.getElementById('otp-code').value = '';
+                    
+                    // Disable resend button for 60 seconds
+                    let countdown = 60;
+                    btn.textContent = `${translations[currentLanguage].resendOtpButton} (${countdown}s)`;
+                    const interval = setInterval(() => {
+                        countdown--;
+                        btn.textContent = `${translations[currentLanguage].resendOtpButton} (${countdown}s)`;
+                        if (countdown <= 0) {
+                            clearInterval(interval);
+                            btn.textContent = translations[currentLanguage].resendOtpButton;
+                            btn.disabled = false;
+                        }
+                    }, 1000);
+                } else {
+                    showOtpMessage(data.error || translations[currentLanguage].errorOccurred, 'error');
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showOtpMessage(translations[currentLanguage].errorOccurred, 'error');
+                btn.disabled = false;
+            }
+        }
+
+        function closeOtpModal() {
+            const modal = document.getElementById('otp-modal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            document.getElementById('otp-code').value = '';
+            showOtpMessage('', '');
+        }
+
+        function showOtpMessage(msg, type) {
+            const otpMessage = document.getElementById('otp-message');
+            if (!msg) {
+                otpMessage.style.display = 'none';
+                return;
+            }
+            otpMessage.textContent = msg;
+            otpMessage.className = 'message ' + type;
+            otpMessage.style.display = 'block';
+        }
+
+        // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('lang-id').classList.toggle('active', currentLanguage === 'id');
-            document.getElementById('lang-en').classList.toggle('active', currentLanguage === 'en');
-            updateLanguage();
+            // Apply translations using centralized translations from app.js
+            setLanguage(currentLanguage);
+            
+            // Initialize reCAPTCHA
+            initRecaptcha();
         });
     </script>
 </body>

@@ -24,9 +24,21 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
 
 DB_TYPE = "postgresql" if DATABASE_URL else "sqlite"
 
+# Email configuration (SMTP)
+SMTP_HOST = os.environ.get("SMTP_HOST")  # e.g., smtp.gmail.com
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD")
+SMTP_FROM = os.environ.get("SMTP_FROM", "noreply@financialadvisor.com")
+APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
+
 # Flask config
 FLASK_CONFIG = {
     "SQLALCHEMY_DATABASE_URI": DATABASE_URL or f"sqlite:///{DB_PATH}",
     "SQLALCHEMY_TRACK_MODIFICATIONS": False,
     "SECRET_KEY": os.environ.get("SECRET_KEY", "dev-secret-key"),
 }
+
+# reCAPTCHA (optional)
+RECAPTCHA_SITE_KEY = os.environ.get("RECAPTCHA_SITE_KEY", "")
+RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "")

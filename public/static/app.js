@@ -178,19 +178,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load user menu and get user data
   const user = await loadUserMenu();
 
-  // Add active page badge next to title
+  // Add active page badge next to title (skip auth pages)
   const titleEl = document.querySelector('header h1');
   if (titleEl) {
     const path = window.location.pathname;
-    let page = 'Dashboard';
-    if (path.includes('admin')) page = 'Admin';
-    else if (path.includes('profile')) page = 'Profile';
-    else if (path.includes('settings')) page = 'Settings';
-    else if (path.includes('login')) page = 'Login';
-    const badge = document.createElement('span');
-    badge.className = 'page-badge';
-    badge.textContent = page;
-    titleEl.appendChild(badge);
+    const isAuthPage = path.includes('login') || path.includes('forgot') || path.includes('reset');
+    if (!isAuthPage) {
+      let page = 'Dashboard';
+      if (path.includes('admin')) page = 'Admin';
+      else if (path.includes('profile')) page = 'Profile';
+      else if (path.includes('settings')) page = 'Settings';
+      const badge = document.createElement('span');
+      badge.className = 'page-badge';
+      badge.textContent = page;
+      titleEl.appendChild(badge);
+    }
   }
   
   // Add window click listener to close dropdown
@@ -224,6 +226,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 const translations = {
   id: {
+    // App branding
+    appTitle: "SmartBudget Assistant",
+    brandTitle: "SmartBudget Assistant",
+    loginSubtitle: "SmartBudget Assistant",
     totalBalanceLabel: "💰 Saldo Total",
     accountFilterLabel: "Akun:",
     allAccountsOption: "Semua Akun",
@@ -290,7 +296,7 @@ const translations = {
     newChatButton: "Obrolan Baru",
     chatHistoryHeader: "Riwayat Obrolan",
     welcomeToAdvisor: "Selamat Datang di Advisor AI",
-    welcomeToAdvisorDesc: "Asisten keuangan pintar Anda. Mulai percakapan untuk mendapatkan saran finansial.",
+    welcomeToAdvisorDesc: "SmartBudget Assistant Anda. Mulai percakapan untuk mendapatkan saran finansial.",
     chatPlaceholder: "Ketik pesan Anda...",
     aiDisclaimer: "AI dapat membuat kesalahan. Verifikasi informasi penting.",
     featureFinancialAnalysis: "Analisis Keuangan",
@@ -304,15 +310,96 @@ const translations = {
     loginButton: "Masuk",
     dontHaveAccount: "Belum punya akun?",
     registerLink: "Daftar di sini",
+    // Register page keys
+    registerTitle: "Daftar",
+    registerSubtitle: "Buat akun baru",
+    fullNameLabel: "Nama Lengkap",
+    registerButton: "Daftar",
+    alreadyHaveAccount: "Sudah punya akun?",
+    loginLinkText: "Login di sini",
+    registrationSuccess: "Pendaftaran berhasil! Mengalihkan ke login...",
+    emailAlreadyExists: "Email sudah terdaftar",
+    registrationFailed: "Pendaftaran gagal",
+    passwordWeak: "Lemah",
+    passwordFair: "Sedang",
+    passwordStrong: "Kuat",
+    passwordStrengthLabel: "Kekuatan",
+    agreeTermsLabel: "Saya setuju dengan <a href=\"/terms.html\" target=\"_blank\">Syarat & Ketentuan</a> dan <a href=\"/privacy.html\" target=\"_blank\">Kebijakan Privasi</a>",
+    agreeTermsPrefix: "Saya setuju dengan",
+    termsLink: "Syarat & Ketentuan",
+    termsTitle: "Syarat & Ketentuan",
+    agreeTermsAnd: "dan",
+    privacyLink: "Kebijakan Privasi",
+    privacyTitle: "Kebijakan Privasi",
+    termsModalTitle: "Syarat & Ketentuan",
+    privacyModalTitle: "Kebijakan Privasi",
+    termsRequired: "Anda harus menyetujui Syarat & Ketentuan",
+    // OTP Verification
+    otpModalTitle: "Verifikasi Email",
+    otpSentMessage: "Kami telah mengirim kode verifikasi ke email Anda",
+    otpCodeLabel: "Kode Verifikasi (6 digit)",
+    verifyButton: "Verifikasi",
+    resendOtpButton: "Kirim Ulang",
+    otpNotReceived: "Tidak menerima kode?",
+    otpVerifyingMessage: "Memverifikasi kode...",
+    otpInvalidError: "Kode OTP tidak valid",
+    otpExpiredError: "Kode OTP telah kedaluwarsa",
+    generatePassword: "Buat Password Kuat",
+    generatePasswordHint: "Butuh password yang kuat?",
+    passwordCopied: "Password disalin ke clipboard!",
+    otpVerificationSuccess: "Verifikasi berhasil! Akun Anda telah dibuat.",
+    sendingOtp: "Mengirim kode verifikasi...",
+    otpSentSuccess: "Kode verifikasi telah dikirim ke email Anda",
     loginSuccess: "Login berhasil! Mengalihkan...",
     invalidEmail: "Email atau username tidak valid",
     invalidPassword: "Password tidak valid",
     loginFailed: "Login gagal",
     errorOccurred: "Terjadi kesalahan",
+    rememberMe: "Ingat saya",
+    forgotPassword: "Lupa password?",
+    recaptchaNoticeHtml: "Situs ini dilindungi oleh reCAPTCHA dan <a href=\"https://policies.google.com/privacy\" target=\"_blank\" rel=\"noopener noreferrer\">Kebijakan Privasi</a> serta <a href=\"https://policies.google.com/terms\" target=\"_blank\" rel=\"noopener noreferrer\">Persyaratan Layanan</a> Google berlaku.",
+    recaptchaNotice: "Situs ini dilindungi oleh reCAPTCHA dan Kebijakan Privasi serta Persyaratan Layanan Google berlaku.",
+    brandTagline: "Pendamping Keuangan Anda",
     brandSubtitle: "Kelola keuangan dengan cerdas dan terstruktur.",
     featureTransactions: "Pencatatan transaksi harian",
     featureSavings: "Target tabungan dan progress",
     featureSummary: "Ringkasan dan analisis bulanan",
+    welcomeToSmartBudget: "Bergabung dengan SmartBudget",
+    registerWelcomeMessage: "Mulai perjalanan finansial Anda bersama SmartBudget Assistant. Kelola keuangan dengan mudah dan capai tujuan finansial Anda.",
+    feature1: "Kelola Keuangan dengan Mudah",
+    feature2: "Analisis Keuangan dengan AI",
+    feature3: "Capai Target Tabungan Anda",
+    feature4: "Data Aman & Terenkripsi",
+    // Forgot Password page
+    forgotPasswordTitle: "Lupa Password",
+    forgotPasswordDesc: "Masukkan email Anda. Jika terdaftar, kami akan kirim tautan reset.",
+    sendResetLink: "Kirim Tautan Reset",
+    backToLogin: "Kembali ke Login",
+    resetLinkSent: "Jika email terdaftar, link reset telah dikirim.",
+    requestFailed: "Gagal memproses permintaan",
+    networkError: "Terjadi kesalahan jaringan",
+    devModeNotice: "Mode Pengujian:",
+    smtpNotConfigured: "SMTP belum dikonfigurasi. Gunakan tautan berikut:",
+    // Reset Password page
+    resetPasswordTitle: "Reset Password",
+    resetPasswordDesc: "Masukkan password baru Anda.",
+    newPasswordLabel: "Password Baru",
+    confirmPasswordLabel: "Konfirmasi Password",
+    resetPasswordButton: "Reset Password",
+    tokenNotFound: "Token tidak ditemukan. Buka tautan reset dari email.",
+    passwordMismatch: "Password tidak cocok",
+    passwordTooShort: "Password minimal 6 karakter",
+    passwordResetSuccess: "Password berhasil direset. Mengalihkan ke login...",
+    passwordResetFailed: "Gagal mereset password",
+    // Password reset API messages
+    emailRequired: "Email harus diisi",
+    resetLinkSentIfRegistered: "Jika email terdaftar, link reset telah dikirim.",
+    tokenAndPasswordRequired: "Token dan password baru wajib diisi",
+    passwordMinLength: "Password minimal 6 karakter",
+    invalidToken: "Token tidak valid",
+    tokenExpired: "Token sudah kadaluarsa",
+    passwordResetSuccessLogin: "Password berhasil direset. Silakan login.",
+    passwordResetError: "Gagal mereset password",
     // Profile page
     profileTitle: "Informasi Profil",
     profileName: "Nama",
@@ -349,6 +436,10 @@ const translations = {
     menuLogout: "Keluar",
   },
   en: {
+    // App branding
+    appTitle: "SmartBudget Assistant",
+    brandTitle: "SmartBudget Assistant",
+    loginSubtitle: "SmartBudget Assistant",
     totalBalanceLabel: "💰 Total Balance",
     accountFilterLabel: "Account:",
     allAccountsOption: "All Accounts",
@@ -415,7 +506,7 @@ const translations = {
     newChatButton: "New Chat",
     chatHistoryHeader: "Chat History",
     welcomeToAdvisor: "Welcome to Advisor AI",
-    welcomeToAdvisorDesc: "Your smart financial assistant. Start a conversation to get financial advice.",
+    welcomeToAdvisorDesc: "Your SmartBudget Assistant. Start a conversation to get financial advice.",
     chatPlaceholder: "Type your message...",
     aiDisclaimer: "AI can make mistakes. Verify important information.",
     featureFinancialAnalysis: "Financial Analysis",
@@ -429,15 +520,96 @@ const translations = {
     loginButton: "Login",
     dontHaveAccount: "Don't have an account?",
     registerLink: "Register here",
+    // Register page keys
+    registerTitle: "Register",
+    registerSubtitle: "Create new account",
+    fullNameLabel: "Full Name",
+    registerButton: "Register",
+    alreadyHaveAccount: "Already have an account?",
+    loginLinkText: "Login here",
+    registrationSuccess: "Registration successful! Redirecting to login...",
+    emailAlreadyExists: "Email already registered",
+    registrationFailed: "Registration failed",
+    passwordWeak: "Weak",
+    passwordFair: "Fair",
+    passwordStrong: "Strong",
+    passwordStrengthLabel: "Strength",
+    agreeTermsLabel: "I agree to the <a href=\"/terms.html\" target=\"_blank\">Terms & Conditions</a> and <a href=\"/privacy.html\" target=\"_blank\">Privacy Policy</a>",
+    agreeTermsPrefix: "I agree to the",
+    termsLink: "Terms & Conditions",
+    termsTitle: "Terms & Conditions",
+    agreeTermsAnd: "and",
+    privacyLink: "Privacy Policy",
+    privacyTitle: "Privacy Policy",
+    termsModalTitle: "Terms & Conditions",
+    privacyModalTitle: "Privacy Policy",
+    termsRequired: "You must agree to Terms & Conditions",
+    // OTP Verification
+    otpModalTitle: "Email Verification",
+    otpSentMessage: "We've sent a verification code to your email",
+    otpCodeLabel: "Verification Code (6 digits)",
+    verifyButton: "Verify",
+    resendOtpButton: "Resend",
+    otpNotReceived: "Didn't receive the code?",
+    otpVerifyingMessage: "Verifying code...",
+    otpInvalidError: "Invalid OTP code",
+    otpExpiredError: "OTP code has expired",
+    generatePassword: "Generate Strong Password",
+    generatePasswordHint: "Need a strong password?",
+    passwordCopied: "Password copied to clipboard!",
+    otpVerificationSuccess: "Verification successful! Your account has been created.",
+    sendingOtp: "Sending verification code...",
+    otpSentSuccess: "Verification code has been sent to your email",
     loginSuccess: "Login successful! Redirecting...",
     invalidEmail: "Invalid email or username",
     invalidPassword: "Invalid password",
     loginFailed: "Login failed",
     errorOccurred: "An error occurred",
+    rememberMe: "Remember me",
+    forgotPassword: "Forgot password?",
+    recaptchaNoticeHtml: "This site is protected by reCAPTCHA and the Google <a href=\"https://policies.google.com/privacy\" target=\"_blank\" rel=\"noopener noreferrer\">Privacy Policy</a> and <a href=\"https://policies.google.com/terms\" target=\"_blank\" rel=\"noopener noreferrer\">Terms of Service</a> apply.",
+    recaptchaNotice: "This site is protected by reCAPTCHA and the Google Privacy Policy and Terms of Service apply.",
+    brandTagline: "Your Financial Companion",
     brandSubtitle: "Manage your finances smartly and structured.",
     featureTransactions: "Daily transaction recording",
     featureSavings: "Savings goals and progress",
     featureSummary: "Monthly summary and analysis",
+    welcomeToSmartBudget: "Join SmartBudget",
+    registerWelcomeMessage: "Start your financial journey with SmartBudget Assistant. Manage your finances easily and achieve your financial goals.",
+    feature1: "Manage Finances Easily",
+    feature2: "AI-Powered Financial Analysis",
+    feature3: "Achieve Your Savings Goals",
+    feature4: "Secure & Encrypted Data",
+    // Forgot Password page
+    forgotPasswordTitle: "Forgot Password",
+    forgotPasswordDesc: "Enter your email. If registered, we will send a reset link.",
+    sendResetLink: "Send Reset Link",
+    backToLogin: "Back to Login",
+    resetLinkSent: "If email is registered, reset link has been sent.",
+    requestFailed: "Failed to process request",
+    networkError: "Network error occurred",
+    devModeNotice: "Test Mode:",
+    smtpNotConfigured: "SMTP not configured. Use this link:",
+    // Reset Password page
+    resetPasswordTitle: "Reset Password",
+    resetPasswordDesc: "Enter your new password.",
+    newPasswordLabel: "New Password",
+    confirmPasswordLabel: "Confirm Password",
+    resetPasswordButton: "Reset Password",
+    tokenNotFound: "Token not found. Please open reset link from email.",
+    passwordMismatch: "Passwords do not match",
+    passwordTooShort: "Password must be at least 6 characters",
+    passwordResetSuccess: "Password successfully reset. Redirecting to login...",
+    passwordResetFailed: "Failed to reset password",
+    // Password reset API messages
+    emailRequired: "Email is required",
+    resetLinkSentIfRegistered: "If email is registered, reset link has been sent.",
+    tokenAndPasswordRequired: "Token and new password are required",
+    passwordMinLength: "Password must be at least 6 characters",
+    invalidToken: "Invalid token",
+    tokenExpired: "Token has expired",
+    passwordResetSuccessLogin: "Password successfully reset. Please login.",
+    passwordResetError: "Failed to reset password",
     // Profile page
     profileTitle: "Profile Information",
     profileName: "Name",
@@ -1184,9 +1356,10 @@ function setLanguage(lang) {
   if (!translations[lang]) lang = 'id'; // Default to ID
   localStorage.setItem('language', lang);
 
-  // Update active button
-  document.querySelectorAll('.lang-button').forEach(btn => btn.classList.remove('active'));
-  document.getElementById(`lang-${lang}`).classList.add('active');
+  // Update active button (support both .lang-button and .lang-btn classes)
+  document.querySelectorAll('.lang-button, .lang-btn').forEach(btn => btn.classList.remove('active'));
+  const langBtn = document.getElementById(`lang-${lang}`);
+  if (langBtn) langBtn.classList.add('active');
 
   // Translate all elements with data-i18n attribute
   const t = translations[lang];
@@ -1194,6 +1367,14 @@ function setLanguage(lang) {
     const key = el.getAttribute('data-i18n');
     if (t[key]) {
       el.textContent = t[key];
+    }
+  });
+
+  // Translate elements requiring HTML content (e.g., links)
+  document.querySelectorAll('[data-i18n-html]').forEach(el => {
+    const key = el.getAttribute('data-i18n-html');
+    if (t[key]) {
+      el.innerHTML = t[key];
     }
   });
 

@@ -8,7 +8,7 @@ AI-powered Personal Finance Management System with intelligent chatbot assistant
 
 ## 🌟 Features
 
-- 🤖 **AI Financial Assistant** - Powered by OpenAI GPT-4 & Google Gemini
+- 🤖 **AI SmartBudget Assistant** - Powered by OpenAI GPT-4 & Google Gemini
 - 💸 **Smart Transaction Tracking** - Natural language expense/income recording
 - 📊 **Budget Management** - Track spending by category with visual insights
 - 🎯 **Savings Goals** - Set and monitor financial targets

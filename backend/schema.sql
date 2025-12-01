@@ -21,6 +21,27 @@ CREATE TABLE IF NOT EXISTS sessions (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Tabel password reset (untuk fitur lupa password)
+CREATE TABLE IF NOT EXISTS password_resets (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Tabel untuk OTP registrasi
+CREATE TABLE IF NOT EXISTS registration_otps (
+    id SERIAL PRIMARY KEY,
+    email TEXT NOT NULL,
+    otp_code TEXT NOT NULL,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabel transaksi harian
 CREATE TABLE IF NOT EXISTS transactions (
     id SERIAL PRIMARY KEY,
