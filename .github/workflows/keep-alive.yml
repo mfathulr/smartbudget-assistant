@@ -1,0 +1,29 @@
+name: Keep Render Service Alive
+
+on:
+  schedule:
+    # Ping every 10 minutes (cron format: minute hour day month weekday)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  ping-service:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Ping Health Endpoint
+        run: |
+          echo "🔄 Pinging SmartBudget-Assistant service..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://smartbudget-assistant.onrender.com/health)
+          
+          if [ "$RESPONSE" -eq 200 ]; then
+            echo "✅ Service is healthy (HTTP $RESPONSE)"
+          else
+            echo "⚠️ Service returned HTTP $RESPONSE"
+            exit 1
+          fi
+      
+      - name: Log Timestamp
+        if: success()
+        run: |
+          echo "Last ping: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"

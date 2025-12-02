@@ -103,6 +103,18 @@ app.teardown_appcontext(close_db)
 client = OpenAI()
 
 
+# === Health Check Endpoint (for keep-alive monitoring) ===
+@app.route("/health", methods=["GET"])
+@app.route("/api/health", methods=["GET"])
+def health_check():
+    """Simple health check endpoint for uptime monitoring"""
+    return jsonify({
+        "status": "ok",
+        "service": "SmartBudget-Assistant",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }), 200
+
+
 # === Public Config Endpoint (safe values only) ===
 @app.route("/api/public-config", methods=["GET"])
 def public_config():
