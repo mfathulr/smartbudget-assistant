@@ -37,6 +37,7 @@ from auth import require_login, require_admin
 MESSAGES = {
     "id": {
         "email_required": "Email harus diisi",
+        "email_not_registered": "Email tidak terdaftar",
         "reset_link_sent": "Jika email terdaftar, link reset telah dikirim.",
         "token_password_required": "Token dan password baru wajib diisi",
         "password_min_length": "Password minimal 6 karakter",
@@ -47,6 +48,7 @@ MESSAGES = {
     },
     "en": {
         "email_required": "Email is required",
+        "email_not_registered": "Email is not registered",
         "reset_link_sent": "If email is registered, reset link has been sent.",
         "token_password_required": "Token and new password are required",
         "password_min_length": "Password must be at least 6 characters",
@@ -785,11 +787,9 @@ def password_forgot_api():
     cur = db.execute("SELECT id, name FROM users WHERE email = ?", (email,))
     row = cur.fetchone()
 
-    # Always respond with same message to avoid email enumeration
-    message = get_message("reset_link_sent", lang)
-
+    # If email not registered, return explicit error (per product request)
     if not row:
-        return jsonify({"status": "ok", "message": message}), 200
+        return jsonify({"error": get_message("email_not_registered", lang)}), 404
 
     user_id = row["id"]
     user_name = row["name"]
@@ -808,13 +808,13 @@ def password_forgot_api():
         db.commit()
     except Exception:
         db.rollback()
-        # Still return generic success to avoid leaking
-        return jsonify({"status": "ok", "message": message}), 200
+        # Return server error on DB failure
+        return jsonify({"error": "Failed to process reset request"}), 500
 
     # Try to send email
     email_sent = send_password_reset_email(email, token, user_name)
 
-    response_data = {"status": "ok", "message": message}
+    response_data = {"status": "ok", "message": get_message("reset_link_sent", lang)}
 
     # If email not sent (dev mode), include reset URL for testing
     if not email_sent:
