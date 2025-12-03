@@ -52,9 +52,121 @@
                     <button id="lang-en" class="lang-button">EN</button>
                 </div>
             </div>
+
+            <!-- Delete Account Section -->
+            <div class="setting-item" style="border-top: 2px solid #dc3545; padding-top: 1.5rem; margin-top: 2rem;">
+                <h2 class="card-subtitle" style="font-size: 1.2rem; margin-bottom: 0.5rem; color: #dc3545;" data-i18n="deleteAccountTitle">Hapus Akun</h2>
+                <p style="color: #dc3545; margin-bottom: 1rem;" data-i18n="deleteAccountDesc">
+                    ⚠️ Tindakan ini tidak dapat dibatalkan. Semua data Anda akan dihapus secara permanen.
+                </p>
+                <button id="deleteAccountBtn" class="btn" style="background-color: #dc3545; color: white; border: none; padding: 0.6rem 1.2rem; cursor: pointer; border-radius: 8px; font-weight: 500;">
+                    <i class="fas fa-trash"></i> <span data-i18n="deleteAccountBtn">Hapus Akun Saya</span>
+                </button>
+            </div>
         </div>
     </main>
 
+    <!-- Delete Account Confirmation Modal -->
+    <div id="deleteAccountModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="max-width: 500px; margin: 2rem; position: relative;">
+            <h2 class="card-title" style="color: #dc3545;" data-i18n="confirmDeleteTitle">Konfirmasi Hapus Akun</h2>
+            <p style="color: #dc3545; margin-bottom: 1.5rem;" data-i18n="confirmDeleteWarning">
+                ⚠️ Anda akan menghapus akun secara permanen. Semua transaksi, tabungan, dan data lainnya akan hilang.
+            </p>
+            <form id="deleteAccountForm">
+                <div class="form-group">
+                    <label for="confirmPassword" data-i18n="enterPasswordConfirm">Masukkan password untuk konfirmasi:</label>
+                    <input 
+                        type="password" 
+                        id="confirmPassword" 
+                        name="password"
+                        autocomplete="current-password"
+                        class="form-control"
+                        required
+                        placeholder="Password"
+                    />
+                </div>
+                <div style="margin: 1.5rem 0;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="confirmUnderstand" required style="width: auto;" />
+                        <span data-i18n="understandDelete">Saya memahami bahwa tindakan ini tidak dapat dibatalkan</span>
+                    </label>
+                </div>
+                <div id="deleteErrorMsg" style="color: #dc3545; margin-bottom: 1rem; display: none;"></div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" id="cancelDeleteBtn" class="btn" style="background-color: #6b7280; color: white;" data-i18n="cancelBtn">Batal</button>
+                    <button type="submit" class="btn" style="background-color: #dc3545; color: white;" data-i18n="confirmDeleteBtn">Hapus Akun</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="/static/app.js"></script>
+    <script>
+        // Delete Account Modal Logic
+        const deleteAccountBtn = document.getElementById('deleteAccountBtn');
+        const deleteAccountModal = document.getElementById('deleteAccountModal');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+        const deleteAccountForm = document.getElementById('deleteAccountForm');
+        const deleteErrorMsg = document.getElementById('deleteErrorMsg');
+
+        deleteAccountBtn.addEventListener('click', () => {
+            deleteAccountModal.style.display = 'flex';
+            document.getElementById('confirmPassword').value = '';
+            document.getElementById('confirmUnderstand').checked = false;
+            deleteErrorMsg.style.display = 'none';
+        });
+
+        cancelDeleteBtn.addEventListener('click', () => {
+            deleteAccountModal.style.display = 'none';
+        });
+
+        deleteAccountModal.addEventListener('click', (e) => {
+            if (e.target === deleteAccountModal) {
+                deleteAccountModal.style.display = 'none';
+            }
+        });
+
+        deleteAccountForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const password = document.getElementById('confirmPassword').value;
+            const understand = document.getElementById('confirmUnderstand').checked;
+
+            if (!understand) {
+                deleteErrorMsg.textContent = 'Anda harus mencentang kotak konfirmasi';
+                deleteErrorMsg.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/account/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Session-Token': localStorage.getItem('session_token') || ''
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Clear session and redirect to login
+                    localStorage.removeItem('session_token');
+                    alert(data.message || 'Akun Anda telah dihapus.');
+                    window.location.href = '/login.html';
+                } else {
+                    deleteErrorMsg.textContent = data.error || 'Gagal menghapus akun';
+                    deleteErrorMsg.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Delete account error:', error);
+                deleteErrorMsg.textContent = 'Terjadi kesalahan. Silakan coba lagi.';
+                deleteErrorMsg.style.display = 'block';
+            }
+        });
+    </script>
 </body>
 </html>

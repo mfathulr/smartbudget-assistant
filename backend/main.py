@@ -52,6 +52,9 @@ MESSAGES = {
         "token_expired": "Token sudah kadaluarsa",
         "password_reset_success": "Password berhasil direset. Silakan login.",
         "password_reset_failed": "Gagal mereset password",
+        "password_required": "Password diperlukan untuk konfirmasi",
+        "account_deleted": "Akun Anda telah dihapus. Terima kasih telah menggunakan SmartBudget.",
+        "delete_account_failed": "Gagal menghapus akun",
     },
     "en": {
         "email_required": "Email is required",
@@ -65,6 +68,9 @@ MESSAGES = {
         "token_expired": "Token has expired",
         "password_reset_success": "Password successfully reset. Please login.",
         "password_reset_failed": "Failed to reset password",
+        "password_required": "Password is required for confirmation",
+        "account_deleted": "Your account has been deleted. Thank you for using SmartBudget.",
+        "delete_account_failed": "Failed to delete account",
     },
 }
 
@@ -834,6 +840,48 @@ def logout_api():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route("/api/account/delete", methods=["POST"])
+@require_login
+def delete_account_api():
+    """Delete user account permanently. Requires password confirmation."""
+    db = get_db()
+    user_id = g.user["id"]
+    data = request.get_json() or {}
+    password = (data.get("password") or "").strip()
+    lang = get_language()
+
+    if not password:
+        return jsonify({"error": get_message("password_required", lang)}), 400
+
+    # Verify password
+    cur = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    if not row or not check_password_hash(row["password_hash"], password):
+        return jsonify({"error": get_message("incorrect_password", lang)}), 401
+
+    try:
+        # Delete all user data (cascade will handle related tables if FK constraints exist)
+        # Manual deletion for safety
+        db.execute("DELETE FROM chat_logs WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM chat_summaries WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM chat_log_embeddings WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM savings_goals WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        db.commit()
+        
+        return jsonify({
+            "status": "ok",
+            "message": get_message("account_deleted", lang)
+        }), 200
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Failed to delete account for user {user_id}: {e}")
+        return jsonify({"error": get_message("delete_account_failed", lang)}), 500
+
+
 # === PASSWORD RESET ROUTES ===
 @app.route("/api/password/forgot", methods=["POST"])
 def password_forgot_api():
@@ -911,9 +959,11 @@ def verify_reset_token_api():
         (token,),
     )
     row = cur.fetchone()
-    
+
     if not row:
-        return jsonify({"error": get_message("invalid_token", lang), "valid": False}), 404
+        return jsonify(
+            {"error": get_message("invalid_token", lang), "valid": False}
+        ), 404
 
     # Check expiry
     expires_at = row["expires_at"]
@@ -926,11 +976,15 @@ def verify_reset_token_api():
             except ValueError:
                 exp_dt = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S")
     except Exception:
-        return jsonify({"error": get_message("invalid_token", lang), "valid": False}), 400
+        return jsonify(
+            {"error": get_message("invalid_token", lang), "valid": False}
+        ), 400
 
     wib_now = datetime.now(timezone(timedelta(hours=7))).replace(tzinfo=None)
     if exp_dt < wib_now:
-        return jsonify({"error": get_message("token_expired", lang), "valid": False}), 400
+        return jsonify(
+            {"error": get_message("token_expired", lang), "valid": False}
+        ), 400
 
     return jsonify({"valid": True, "email": row["email"]}), 200
 
