@@ -253,10 +253,12 @@ def init_db(standalone=False):
         traceback.print_exc()
 
     # Create default admin user if not exists (from environment variables)
-    ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'admin@smartbudget.app')
-    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'changeme123')  # MUST be changed in production
-    ADMIN_NAME = os.getenv('ADMIN_NAME', 'System Admin')
-    
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@smartbudget.app")
+    ADMIN_PASSWORD = os.getenv(
+        "ADMIN_PASSWORD", "changeme123"
+    )  # MUST be changed in production
+    ADMIN_NAME = os.getenv("ADMIN_NAME", "System Admin")
+
     try:
         if DB_TYPE == "postgresql":
             cur = db.cursor()

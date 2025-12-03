@@ -110,17 +110,18 @@ def sanitize_for_logging(data: dict) -> dict:
     """Sanitize sensitive data for logging by masking passwords and tokens"""
     if not isinstance(data, dict):
         return data
-    
+
     sanitized = data.copy()
-    sensitive_keys = ['password', 'token', 'api_key', 'secret', 'otp', 'pin']
-    
+    sensitive_keys = ["password", "token", "api_key", "secret", "otp", "pin"]
+
     for key in sanitized:
         # Check if key contains sensitive information
         if any(sensitive in key.lower() for sensitive in sensitive_keys):
             if sanitized[key]:
-                sanitized[key] = '***REDACTED***'
-    
+                sanitized[key] = "***REDACTED***"
+
     return sanitized
+
 
 # Initialize Flask app
 app = Flask(
@@ -297,7 +298,9 @@ Jika Anda tidak mendaftar, abaikan email ini.
 
     # Fallback to SMTP if SendGrid not configured
     if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
-        print(f"[DEV MODE] OTP sent to {to_email} (check console in production, OTP redacted for security)")
+        print(
+            f"[DEV MODE] OTP sent to {to_email} (check console in production, OTP redacted for security)"
+        )
         return False
 
     try:
