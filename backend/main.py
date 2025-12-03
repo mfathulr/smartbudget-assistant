@@ -248,7 +248,7 @@ Jika Anda tidak mendaftar, abaikan email ini.
         msg.attach(MIMEText(text, "plain"))
         msg.attach(MIMEText(html, "html"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_FROM, to_email, msg.as_string())
@@ -413,7 +413,7 @@ Email otomatis - Jangan balas email ini
         msg.attach(part2)
 
         # Send email
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=5) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_FROM, to_email, msg.as_string())
@@ -745,7 +745,7 @@ def login_api():
     # Check if email exists
     if not user:
         return jsonify({"error": get_message("email_not_registered", lang)}), 404
-    
+
     # Check if password is correct
     if not check_password_hash(user["password_hash"], password):
         return jsonify({"error": get_message("incorrect_password", lang)}), 401
