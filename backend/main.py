@@ -33,6 +33,7 @@ from config import (
 
 # SendGrid API key (optional, fallback to SMTP)
 import os
+
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 from database import get_db, close_db, init_db
 from auth import require_login, require_admin
@@ -171,26 +172,28 @@ def verify_recaptcha_token(token: str, remote_ip: str = None) -> bool:
 
 
 # --- Email Utilities ---
-def send_email_sendgrid(to_email: str, subject: str, html_content: str, text_content: str) -> bool:
+def send_email_sendgrid(
+    to_email: str, subject: str, html_content: str, text_content: str
+) -> bool:
     """Send email via SendGrid API. Returns True if sent, False on error."""
     if not SENDGRID_API_KEY:
         return False
-    
+
     try:
         from sendgrid import SendGridAPIClient
         from sendgrid.helpers.mail import Mail
-        
+
         message = Mail(
             from_email=SMTP_FROM or "noreply@smartbudget.app",
             to_emails=to_email,
             subject=subject,
             plain_text_content=text_content,
-            html_content=html_content
+            html_content=html_content,
         )
-        
+
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         response = sg.send(message)
-        
+
         print(f"[SENDGRID] Email sent to {to_email} (status: {response.status_code})")
         return True
     except Exception as e:
@@ -202,7 +205,7 @@ def send_otp_email(to_email: str, otp_code: str, user_name: str) -> bool:
     """Send OTP verification email. Returns True if sent, False if dev/no SMTP or error."""
     greeting = f"Halo {user_name}," if user_name else "Halo,"
     subject = "Kode Verifikasi Registrasi - SmartBudget Assistant"
-    
+
     html = f"""
         <!DOCTYPE html>
         <html>
@@ -248,7 +251,7 @@ def send_otp_email(to_email: str, otp_code: str, user_name: str) -> bool:
           </body>
         </html>
         """
-    
+
     text = f"""{greeting}
 
 Terima kasih telah mendaftar di SmartBudget Assistant!
@@ -267,7 +270,7 @@ Jika Anda tidak mendaftar, abaikan email ini.
     print(f"[EMAIL] Sending OTP to {to_email}...")
     if send_email_sendgrid(to_email, subject, html, text):
         return True
-    
+
     # Fallback to SMTP if SendGrid not configured
     if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
         print(f"[DEV MODE] OTP for {to_email}: {otp_code}")
@@ -302,13 +305,13 @@ def send_password_reset_email(
     to_email: str, reset_token: str, user_name: str = None
 ) -> bool:
     """Send password reset email. Returns True if email was sent, False if dev mode."""
-    
+
     print(f"[EMAIL] Sending reset email to {to_email}...")
-    
+
     reset_url = f"{APP_URL}/reset-password.html?token={reset_token}"
     greeting = f"Halo {user_name}," if user_name else "Halo,"
     subject = "Reset Password - SmartBudget Assistant"
-    
+
     # HTML email body with professional design
     html = f"""
         <!DOCTYPE html>
@@ -404,7 +407,7 @@ def send_password_reset_email(
           </body>
         </html>
         """
-    
+
     # Plain text alternative
     text = f"""
 SmartBudget Assistant - Reset Password
@@ -426,28 +429,28 @@ PENTING:
 Email otomatis - Jangan balas email ini
 © 2025 SmartBudget Assistant
         """
-    
+
     # Try SendGrid first
     if send_email_sendgrid(to_email, subject, html, text):
         return True
-    
+
     # Fallback to SMTP if SendGrid not configured
     if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
         print(
             f"[EMAIL] Dev mode - No email provider configured. Host:{SMTP_HOST}, User:{SMTP_USER}"
         )
         return False
-    
+
     try:
         import smtplib
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
-        
+
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = SMTP_FROM
         msg["To"] = to_email
-        
+
         part1 = MIMEText(text, "plain")
         part2 = MIMEText(html, "html")
         msg.attach(part1)

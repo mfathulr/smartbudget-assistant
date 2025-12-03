@@ -74,7 +74,7 @@ def close_db(exc=None):
 
 def init_db(standalone=False):
     """Initialize database from schema.sql
-    
+
     Args:
         standalone: If True, creates connection directly without Flask's g object
     """
@@ -298,7 +298,7 @@ def init_db(standalone=False):
                 print("ℹ️  Admin user already exists")
     except Exception as e:
         print(f"[WARN] Could not create default admin user: {e}")
-    
+
     # Close connection if standalone mode
     if standalone:
         db.close()
