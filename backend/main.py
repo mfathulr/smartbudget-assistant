@@ -42,10 +42,10 @@ from auth import require_login, require_admin
 MESSAGES = {
     "id": {
         "email_required": "Email harus diisi",
-        "email_not_registered": "Email tidak terdaftar",
+        "email_not_registered": "Email tidak terdaftar. Silakan daftar terlebih dahulu.",
         "incorrect_password": "Password salah",
         "email_password_required": "Email dan password harus diisi",
-        "reset_link_sent": "Jika email terdaftar, link reset telah dikirim.",
+        "reset_link_sent": "Link reset password telah dikirim ke email Anda. Silakan cek inbox.",
         "token_password_required": "Token dan password baru wajib diisi",
         "password_min_length": "Password minimal 6 karakter",
         "invalid_token": "Token tidak valid",
@@ -55,10 +55,10 @@ MESSAGES = {
     },
     "en": {
         "email_required": "Email is required",
-        "email_not_registered": "Email is not registered",
+        "email_not_registered": "Email is not registered. Please sign up first.",
         "incorrect_password": "Incorrect password",
         "email_password_required": "Email and password are required",
-        "reset_link_sent": "If email is registered, reset link has been sent.",
+        "reset_link_sent": "Password reset link has been sent to your email. Please check your inbox.",
         "token_password_required": "Token and new password are required",
         "password_min_length": "Password must be at least 6 characters",
         "invalid_token": "Invalid token",
@@ -875,14 +875,18 @@ def password_forgot_api():
     # Try to send email
     email_sent = send_password_reset_email(email, token, user_name)
 
-    response_data = {"status": "ok", "message": get_message("reset_link_sent", lang)}
-
-    # If email not sent (dev mode), include reset URL for testing
-    if not email_sent:
-        reset_url = f"/reset-password.html?token={token}"
-        response_data["reset_url"] = reset_url
-        response_data["dev_mode"] = True
-
+    # Only return success if email was actually sent
+    if email_sent:
+        response_data = {"status": "ok", "message": get_message("reset_link_sent", lang)}
+        return jsonify(response_data), 200
+    
+    # If email not sent (dev mode or email error), include reset URL for testing
+    response_data = {
+        "status": "ok", 
+        "message": "Reset link created. Check server logs for the link (dev mode).",
+        "reset_url": f"/reset-password.html?token={token}",
+        "dev_mode": True
+    }
     return jsonify(response_data), 200
 
 
