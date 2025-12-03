@@ -297,7 +297,7 @@ Jika Anda tidak mendaftar, abaikan email ini.
 
     # Fallback to SMTP if SendGrid not configured
     if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
-        print(f"[DEV MODE] OTP for {to_email}: {otp_code}")
+        print(f"[DEV MODE] OTP sent to {to_email} (check console in production, OTP redacted for security)")
         return False
 
     try:
@@ -321,7 +321,7 @@ Jika Anda tidak mendaftar, abaikan email ini.
         return True
     except Exception as e:
         print(f"[EMAIL ERROR] Failed to send OTP: {e}")
-        print(f"[DEV MODE FALLBACK] OTP for {to_email}: {otp_code}")
+        print(f"[DEV MODE FALLBACK] OTP sent to {to_email} (OTP redacted for security)")
         return False
 
 
@@ -726,7 +726,7 @@ def register_verify_otp():
         email = data.get("email", "").strip().lower()
         otp_code = data.get("otp", "").strip()
 
-        print(f"[DEBUG] Verify OTP - email: {email}, otp: {otp_code}")
+        print(f"[DEBUG] Verify OTP - email: {email}, otp: ***REDACTED***")
 
         if not email or not otp_code:
             return jsonify({"error": "Email and OTP required"}), 400
@@ -739,7 +739,7 @@ def register_verify_otp():
         otp_record = cur.fetchone()
 
         if not otp_record:
-            print(f"[DEBUG] No OTP record found for {email} with code {otp_code}")
+            print(f"[DEBUG] No OTP record found for {email}")
             return jsonify({"error": "Invalid OTP code"}), 400
 
         # Check if OTP expired

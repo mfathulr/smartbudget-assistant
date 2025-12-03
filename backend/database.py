@@ -252,48 +252,52 @@ def init_db(standalone=False):
 
         traceback.print_exc()
 
-    # Create default admin user if not exists
+    # Create default admin user if not exists (from environment variables)
+    ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'admin@smartbudget.app')
+    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'changeme123')  # MUST be changed in production
+    ADMIN_NAME = os.getenv('ADMIN_NAME', 'System Admin')
+    
     try:
         if DB_TYPE == "postgresql":
             cur = db.cursor()
             cur.execute(
                 "SELECT id FROM users WHERE email = %s",
-                ("muhammadfathul386@gmail.com",),
+                (ADMIN_EMAIL,),
             )
             if not cur.fetchone():
-                password_hash = generate_password_hash("cuwiklucu08")
+                password_hash = generate_password_hash(ADMIN_PASSWORD)
                 cur.execute(
                     "INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, %s)",
                     (
-                        "Admin Fathul",
-                        "muhammadfathul386@gmail.com",
+                        ADMIN_NAME,
+                        ADMIN_EMAIL,
                         password_hash,
                         "admin",
                     ),
                 )
                 db.commit()
-                print("✅ Default admin user created: muhammadfathul386@gmail.com")
+                print(f"✅ Default admin user created: {ADMIN_EMAIL}")
             else:
                 print("ℹ️  Admin user already exists")
             cur.close()
         else:
             cur = db.execute(
                 "SELECT id FROM users WHERE email = ?",
-                ("muhammadfathul386@gmail.com",),
+                (ADMIN_EMAIL,),
             )
             if not cur.fetchone():
-                password_hash = generate_password_hash("cuwiklucu08")
+                password_hash = generate_password_hash(ADMIN_PASSWORD)
                 db.execute(
                     "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
                     (
-                        "Admin Fathul",
-                        "muhammadfathul386@gmail.com",
+                        ADMIN_NAME,
+                        ADMIN_EMAIL,
                         password_hash,
                         "admin",
                     ),
                 )
                 db.commit()
-                print("✅ Default admin user created: muhammadfathul386@gmail.com")
+                print(f"✅ Default admin user created: {ADMIN_EMAIL}")
             else:
                 print("ℹ️  Admin user already exists")
     except Exception as e:
