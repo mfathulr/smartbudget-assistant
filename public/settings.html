@@ -272,6 +272,58 @@
             transform: none;
         }
         
+        /* AI Model Selection Styles */
+        .ai-model-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .ai-provider-button,
+        .ai-model-button {
+            flex: 1;
+            min-width: 120px;
+            padding: 0.85rem 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        
+        .ai-provider-button:hover,
+        .ai-model-button:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .ai-provider-button.active,
+        .ai-model-button.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            font-weight: 600;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .ai-provider-button i,
+        .ai-model-button i {
+            font-size: 16px;
+        }
+        
+        #model-buttons-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
         .success-message {
             display: none;
             padding: 0.75rem 1rem;
@@ -282,6 +334,12 @@
             margin-top: 1rem;
             font-size: 0.875rem;
             animation: slideIn 0.3s ease;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .success-message i {
+            margin-right: 4px;
         }
         
         @keyframes slideIn {
@@ -293,6 +351,16 @@
                 opacity: 1;
                 transform: translateY(0);
             }
+        }
+
+        .setting-note {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-note i {
+            flex-shrink: 0;
         }
     </style>
 </head>
@@ -378,34 +446,43 @@
                     </div>
                 </div>
 
-                <!-- OCR Feature Toggle -->
+                <!-- AI Model Setting -->
                 <div class="setting-card">
                     <div class="setting-header">
-                        <div class="setting-icon" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">
-                            <i class="fas fa-camera"></i>
+                        <div class="setting-icon" style="background: linear-gradient(135deg, #ec4899 0%, #d946ef 100%); color: white;">
+                            <i class="fas fa-brain"></i>
                         </div>
                         <div class="setting-info">
-                            <h2 data-i18n="ocrTitle">Fitur Upload Gambar (OCR)</h2>
-                            <p data-i18n="ocrDesc">Aktifkan untuk menggunakan fitur upload gambar di Advisor (struk, menu, dokumen)</p>
+                            <h2 data-i18n="aiModelTitle">Model AI</h2>
+                            <p data-i18n="aiModelDesc">Pilih provider dan model AI untuk fitur Advisor</p>
                         </div>
                     </div>
                     <div class="setting-content">
-                        <div class="toggle-container">
-                            <div class="toggle-info">
-                                <i class="fas fa-image" style="color: #10b981; font-size: 1.5rem;"></i>
-                                <div>
-                                    <div class="toggle-title" data-i18n="ocrToggleTitle">Upload Gambar dengan AI Vision</div>
-                                    <div class="toggle-subtitle" data-i18n="ocrToggleDesc">AI dapat menganalisis struk belanja, menu restoran, dan dokumen keuangan</div>
+                        <div class="ai-model-section">
+                            <!-- Provider Selection -->
+                            <div style="margin-bottom: 1.5rem;">
+                                <label style="display: block; margin-bottom: 0.75rem; font-weight: 600; color: var(--text-primary);">
+                                    <i class="fas fa-plug"></i> Provider
+                                </label>
+                                <p style="margin: 0 0 0.75rem 0; font-size: 0.875rem; color: var(--text-secondary);">
+                                    Pilih provider AI yang ingin Anda gunakan. Model dapat dipilih di halaman Advisor.
+                                </p>
+                                <div class="option-buttons">
+                                    <button id="provider-google" class="option-button ai-provider-button" data-provider="google">
+                                        <i class="fas fa-google" style="color: #4285f4;"></i>
+                                        <span>Google Gemini</span>
+                                    </button>
+                                    <button id="provider-openai" class="option-button ai-provider-button" data-provider="openai">
+                                        <i class="fas fa-openid" style="color: #000;"></i>
+                                        <span>OpenAI GPT</span>
+                                    </button>
                                 </div>
                             </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="ocr-toggle">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <div id="ocr-status" class="setting-note" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 8px; font-size: 0.875rem;">
-                            <i class="fas fa-info-circle"></i>
-                            <span id="ocr-status-text">Memuat status OCR...</span>
+
+                            <div id="ai-model-success" class="success-message">
+                                <i class="fas fa-check-circle"></i>
+                                <span data-i18n="saveSuccess">Pengaturan berhasil disimpan!</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -441,10 +518,6 @@
                                     <span>60 min</span>
                                 </div>
                             </div>
-                            <button id="save-timeout" class="save-button">
-                                <i class="fas fa-save"></i>
-                                <span data-i18n="saveButton">Simpan Pengaturan</span>
-                            </button>
                             <div id="timeout-success" class="success-message">
                                 <i class="fas fa-check-circle"></i>
                                 <span data-i18n="saveSuccess">Pengaturan berhasil disimpan!</span>
@@ -516,6 +589,8 @@
 
         // Language switcher
         const currentLang = localStorage.getItem('language') || 'id';
+        // Ensure the buttons reflect the saved language immediately
+        setLanguage(currentLang);
 
         // Language button click handlers
         document.getElementById('lang-id-card').addEventListener('click', function() {
@@ -526,10 +601,12 @@
             setLanguage('en'); // Use app.js function
         });
 
+
         // Auto-logout Timer Logic
+        // Stub to avoid runtime errors on this page; actual timer runs on dashboard
+        function startLogoutTimer() {}
         const timeoutSlider = document.getElementById('timeout-slider');
         const timeoutDisplay = document.getElementById('timeout-display');
-        const saveTimeoutBtn = document.getElementById('save-timeout');
         const successMessage = document.getElementById('timeout-success');
         
         let logoutTimer = null;
@@ -542,128 +619,113 @@
         // Update display when slider moves
         timeoutSlider.addEventListener('input', function() {
             timeoutDisplay.textContent = this.value;
+            applyTimeoutChange();
         });
 
-        // Save timeout setting
-        saveTimeoutBtn.addEventListener('click', function() {
+        // Debounce helper for autosave
+        function debounce(fn, delay = 400) {
+            let t;
+            return (...args) => {
+                clearTimeout(t);
+                t = setTimeout(() => fn(...args), delay);
+            };
+        }
+
+        const applyTimeoutChange = debounce(() => {
             const minutes = parseInt(timeoutSlider.value);
             localStorage.setItem('auto_logout_minutes', minutes);
             currentTimeout = minutes;
-            
-            // Show success message
+
             successMessage.style.display = 'flex';
             setTimeout(() => {
                 successMessage.style.display = 'none';
-            }, 3000);
+            }, 2000);
 
-            // Restart timer with new timeout
+            // Restart timer with new timeout (stubbed here)
             startLogoutTimer();
-        });
+        }, 300);
 
-        // OCR Toggle Logic
-        const ocrToggle = document.getElementById('ocr-toggle');
-        const ocrStatusText = document.getElementById('ocr-status-text');
+        // === AI PROVIDER SELECTION LOGIC ===
+        let selectedProvider = 'google';
+        const aiModelSuccessMsg = document.getElementById('ai-model-success');
 
-        // Load current OCR status
-        async function loadOCRStatus() {
+        // Load AI provider from server
+        async function loadAIProvider() {
+            try {
+                const response = await apiFetch('/api/me');
+                const userData = await response.json();
+                selectedProvider = userData.ai_provider || 'google';
+                console.log('[SETTINGS] Loaded provider:', selectedProvider);
+                updateAIProviderUI();
+            } catch (error) {
+                console.error('Error loading AI provider:', error);
+            }
+        }
+
+        // Update UI based on selected provider
+        function updateAIProviderUI() {
+            const providerButtons = document.querySelectorAll('.ai-provider-button');
+            providerButtons.forEach(btn => {
+                const provider = btn.dataset.provider;
+                if (provider === selectedProvider) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // Save AI provider selection
+        async function saveAIProvider() {
             try {
                 const response = await apiFetch('/api/me');
                 const userData = await response.json();
                 
-                const isEnabled = userData.ocr_enabled || false;
-                ocrToggle.checked = isEnabled;
-                updateOCRStatus(isEnabled);
-            } catch (error) {
-                console.error('Error loading OCR status:', error);
-                ocrStatusText.innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat status OCR';
-            }
-        }
+                console.log('[SETTINGS] saveAIProvider - selectedProvider:', selectedProvider);
 
-        // Update OCR status display
-        function updateOCRStatus(isEnabled) {
-            if (isEnabled) {
-                ocrStatusText.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> <span style="color: #10b981; font-weight: 500;">Upload gambar diaktifkan</span> - Anda dapat upload struk, menu, dan dokumen di Advisor';
-            } else {
-                ocrStatusText.innerHTML = '<i class="fas fa-times-circle" style="color: #ef4444;"></i> <span style="color: #ef4444; font-weight: 500;">Upload gambar dinonaktifkan</span> - Aktifkan untuk menggunakan fitur analisis gambar';
-            }
-        }
-
-        // Handle OCR toggle change
-        ocrToggle.addEventListener('change', async function() {
-            const isEnabled = this.checked;
-            
-            try {
-                // Get current user data first
-                const getUserRes = await apiFetch('/api/me');
-                const userData = await getUserRes.json();
-                
-                // Update with OCR setting
-                const response = await apiFetch('/api/me', {
+                const updateResponse = await apiFetch('/api/me', {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         name: userData.name,
                         phone: userData.phone || '',
                         bio: userData.bio || '',
-                        ocr_enabled: isEnabled
+                        ai_provider: selectedProvider
                     })
                 });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to update OCR setting');
+
+                if (!updateResponse.ok) {
+                    throw new Error('Failed to save AI provider');
                 }
-                
-                const result = await response.json();
-                updateOCRStatus(isEnabled);
-                
-                // Show temporary success message
-                const originalText = ocrStatusText.innerHTML;
-                ocrStatusText.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i> <span style="color: #10b981; font-weight: 600;">Pengaturan berhasil disimpan!</span>';
+
+                const result = await updateResponse.json();
+                console.log('[SETTINGS] Saved successfully:', result.user);
+
+                aiModelSuccessMsg.style.display = 'flex';
                 setTimeout(() => {
-                    updateOCRStatus(isEnabled);
+                    aiModelSuccessMsg.style.display = 'none';
                 }, 2000);
-                
             } catch (error) {
-                console.error('Error updating OCR setting:', error);
-                // Revert toggle on error
-                this.checked = !isEnabled;
-                ocrStatusText.innerHTML = '<i class="fas fa-exclamation-circle" style="color: #ef4444;"></i> <span style="color: #ef4444;">Gagal menyimpan pengaturan. Silakan coba lagi.</span>';
+                console.error('Error saving AI provider:', error);
+                alert('Gagal menyimpan pengaturan provider. Silakan coba lagi.');
             }
-        });
-
-        // Load OCR status on page load
-        loadOCRStatus();
-
-        // Start logout timer
-        function startLogoutTimer() {
-            if (logoutTimer) {
-                clearTimeout(logoutTimer);
-            }
-            
-            const timeoutMs = currentTimeout * 60 * 1000; // Convert to milliseconds
-            logoutTimer = setTimeout(() => {
-                // Auto logout
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                window.location.href = '/login.html';
-            }, timeoutMs);
         }
 
-        // Reset timer on user activity
-        function resetLogoutTimer() {
-            startLogoutTimer();
-        }
-
-        // Listen for user activity
-        const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-        activityEvents.forEach(event => {
-            document.addEventListener(event, resetLogoutTimer, true);
+        // Provider button handlers
+        const providerButtons = document.querySelectorAll('.ai-provider-button');
+        providerButtons.forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                selectedProvider = btn.dataset.provider;
+                updateAIProviderUI();
+                await saveAIProvider();
+            });
         });
 
-        // Start timer on page load
-        startLogoutTimer();
+        // Load AI provider on page load
+        loadAIProvider();
+
     </script>
 </body>
 </html>
+

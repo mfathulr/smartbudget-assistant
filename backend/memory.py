@@ -35,6 +35,9 @@ def get_effective_config(user_id: int) -> Dict[str, int]:
     }
 
 
+OPENAI_TIMEOUT_SEC = 10
+OPENAI_MAX_RETRIES = 2
+
 client = OpenAI()
 
 
@@ -131,18 +134,26 @@ def maybe_update_summary(user_id: int) -> Optional[Dict]:
         "Jangan sebut hal yang tidak ada. Format poin singkat maksimum 10 baris."
     )
 
-    try:
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": convo_text},
-            ],
-            temperature=0.2,
-        )
-        summary_text = resp.choices[0].message.content.strip()
-    except Exception as e:
-        summary_text = f"(Gagal membuat ringkasan otomatis: {e})"
+    summary_text = None
+    last_error = None
+    for attempt in range(OPENAI_MAX_RETRIES + 1):
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": convo_text},
+                ],
+                temperature=0.2,
+                timeout=OPENAI_TIMEOUT_SEC,
+            )
+            summary_text = resp.choices[0].message.content.strip()
+            break
+        except Exception as e:
+            last_error = e
+
+    if summary_text is None:
+        summary_text = f"(Gagal membuat ringkasan otomatis: {last_error})"
 
     # Upsert summary
     if current:

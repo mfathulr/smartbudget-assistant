@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS users (
     phone TEXT,
     bio TEXT,
     ocr_enabled BOOLEAN DEFAULT FALSE,
+    ai_provider TEXT DEFAULT 'google',
+    -- 'google' or 'openai'
+    ai_model TEXT DEFAULT 'gemini-2.0-flash-lite',
+    -- default model
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -153,10 +157,33 @@ CREATE TABLE IF NOT EXISTS llm_log_embeddings (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Conversation state untuk multi-turn flow management (per session)
+CREATE TABLE IF NOT EXISTS conversation_state (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    intent TEXT NOT NULL,
+    -- "add_transaction", "edit_transaction", "delete_transaction", "transfer", "create_goal"
+    state TEXT NOT NULL,
+    -- "AWAITING_*", "CONFIRMING", "IDLE"
+    partial_data TEXT NOT NULL,
+    -- JSON object dengan field yang sudah dikumpulkan
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    -- TTL: 1 jam dari last update
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+);
+
 -- Index untuk mempercepat pencarian berdasarkan user dan session
 CREATE INDEX IF NOT EXISTS idx_llm_logs_user ON llm_logs(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_llm_logs_session ON llm_logs(session_id);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_state_session ON conversation_state(session_id);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_state_expires ON conversation_state(expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id);
 

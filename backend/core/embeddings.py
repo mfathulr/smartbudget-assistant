@@ -23,6 +23,8 @@ from database import get_db
 
 # Default embedding model
 OPENAI_EMBED_MODEL = "text-embedding-3-small"
+OPENAI_TIMEOUT_SEC = 10
+OPENAI_MAX_RETRIES = 2
 
 client = OpenAI()
 
@@ -38,21 +40,26 @@ def generate_embedding(
     norm = _norm_text(text)
     if not norm:
         return []
+
     if provider == "local":
-        # Simple hashed embedding: map characters to buckets (NOT semantic, just placeholder)
         buckets = [0.0] * 128
         for ch in norm:
             buckets[ord(ch) % 128] += 1.0
-        # L2 normalize
         mag = math.sqrt(sum(v * v for v in buckets)) or 1.0
         return [round(v / mag, 6) for v in buckets]
-    try:
-        resp = client.embeddings.create(model=model, input=[norm])
-        return resp.data[0].embedding  # already list[float]
-    except Exception as e:
-        # Fallback to local if OpenAI fails
-        print(f"[WARN] OpenAI embedding failed, using local fallback: {e}")
-        return generate_embedding(norm, provider="local")
+
+    for attempt in range(OPENAI_MAX_RETRIES + 1):
+        try:
+            resp = client.embeddings.create(
+                model=model,
+                input=[norm],
+                timeout=OPENAI_TIMEOUT_SEC,
+            )
+            return resp.data[0].embedding
+        except Exception as e:
+            if attempt >= OPENAI_MAX_RETRIES:
+                print(f"[WARN] OpenAI embedding failed, using local fallback: {e}")
+                return generate_embedding(norm, provider="local")
 
 
 def ensure_log_embeddings(user_id: int, batch_size: int = 50) -> Dict[str, int]:
@@ -89,7 +96,11 @@ def ensure_log_embeddings(user_id: int, batch_size: int = 50) -> Dict[str, int]:
     embeddings: List[List[float]] = []
     if provider == "openai":
         try:
-            resp = client.embeddings.create(model=OPENAI_EMBED_MODEL, input=texts)
+            resp = client.embeddings.create(
+                model=OPENAI_EMBED_MODEL,
+                input=texts,
+                timeout=OPENAI_TIMEOUT_SEC,
+            )
             embeddings = [d.embedding for d in resp.data]
         except Exception as e:
             print(f"[WARN] Batch embedding failed, falling back item-wise: {e}")

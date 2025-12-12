@@ -3,6 +3,7 @@
 import json
 import re
 import secrets
+import os
 from datetime import datetime, date, timedelta, timezone
 
 try:
@@ -10,13 +11,14 @@ try:
 except Exception:
     genai = None  # Optional: allow running without Google Generative AI
 from flask import Flask, request, jsonify, send_from_directory, g
-from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from openai import OpenAI
 import requests as http_requests
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import modular components
+from auth import require_login, require_admin
 from config import (
     BASE_DIR,
     FLASK_CONFIG,
@@ -30,13 +32,16 @@ from config import (
     RECAPTCHA_SITE_KEY,
     RECAPTCHA_SECRET_KEY,
 )
-
-# SendGrid API key (optional, fallback to SMTP)
-import os
+from database import get_db, close_db, init_db
+from financial_context import get_month_summary, build_financial_context
+from llm import execute_action, TOOLS_DEFINITIONS
+from memory import build_memory_context, log_message, maybe_update_summary
+from routes.memory_routes import memory_bp
+from core import get_logger
+from services import ConversationStateManager
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-from database import get_db, close_db, init_db
-from auth import require_login, require_admin
+logger = get_logger(__name__)
 
 # Translation messages for API responses
 MESSAGES = {
@@ -90,21 +95,6 @@ def get_message(key, lang=None):
     return MESSAGES.get(lang, MESSAGES["id"]).get(key, MESSAGES["id"].get(key, ""))
 
 
-from helpers import get_month_summary, build_financial_context
-from llm_tools import TOOLS_DEFINITIONS
-from llm_executor import execute_action
-from memory import (
-    log_message,
-    build_memory_context,
-    maybe_update_summary,
-    get_memory_summary,
-    get_recent_dialogue,
-    get_effective_config,
-)
-from memory import SUMMARY_THRESHOLD, MAX_LOG_CONTEXT, MAX_LOG_SOURCE
-from embeddings import ensure_log_embeddings, semantic_search
-
-
 # === SECURITY: SANITIZE LOGGING ===
 def sanitize_for_logging(data: dict) -> dict:
     """Sanitize sensitive data for logging by masking passwords and tokens"""
@@ -123,6 +113,45 @@ def sanitize_for_logging(data: dict) -> dict:
     return sanitized
 
 
+def _dedupe_recent_transaction(
+    db,
+    user_id: int,
+    date_str: str,
+    tx_type: str,
+    category: str,
+    amount: float,
+    account: str,
+    window_seconds: int = 5,
+):
+    """Prevent accidental double-record within a short window."""
+    try:
+        row = db.execute(
+            """
+            SELECT id, created_at FROM transactions
+            WHERE user_id = %s AND date = %s AND type = %s AND category = %s AND amount = %s AND account = %s
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (user_id, date_str, tx_type, category, amount, account),
+        ).fetchone()
+        if not row:
+            return None
+        created_at = row.get("created_at") if isinstance(row, dict) else row[1]
+        if not created_at:
+            return None
+        try:
+            ca = created_at
+            if isinstance(ca, str):
+                ca = datetime.fromisoformat(ca.replace("Z", ""))
+        except Exception:
+            return None
+        delta = datetime.now(timezone(timedelta(hours=7))) - ca
+        if delta.total_seconds() <= window_seconds:
+            return row["id"] if isinstance(row, dict) else row[0]
+    except Exception:
+        return None
+    return None
+
+
 # Initialize Flask app
 app = Flask(
     __name__,
@@ -134,6 +163,9 @@ app.config.update(FLASK_CONFIG)
 db_sqlalchemy = SQLAlchemy(app)
 migrate = Migrate(app, db_sqlalchemy)
 app.teardown_appcontext(close_db)
+
+# Register blueprints
+app.register_blueprint(memory_bp)
 
 # Initialize LLM clients
 client = OpenAI()
@@ -245,7 +277,7 @@ def send_otp_email(to_email: str, otp_code: str, user_name: str) -> bool:
                   <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
                     <tr>
                       <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 40px 30px; text-align: center;">
-                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">🔐 Verifikasi Email</h1>
+                        <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">=��� Verifikasi Email</h1>
                         <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 14px; font-weight: 400;">SmartBudget Assistant</p>
                       </td>
                     </tr>
@@ -259,14 +291,14 @@ def send_otp_email(to_email: str, otp_code: str, user_name: str) -> bool:
                         </div>
                         <p style="margin: 0 0 20px 0; color: #374151; font-size: 15px; line-height: 1.6;">Kode ini akan kedaluwarsa dalam <strong>10 menit</strong>.</p>
                         <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 24px 0;">
-                          <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">⚠️ <strong>Jangan bagikan kode ini</strong> kepada siapa pun, termasuk tim SmartBudget Assistant. Kami tidak akan pernah meminta kode verifikasi Anda.</p>
+                          <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">G��n+� <strong>Jangan bagikan kode ini</strong> kepada siapa pun, termasuk tim SmartBudget Assistant. Kami tidak akan pernah meminta kode verifikasi Anda.</p>
                         </div>
                       </td>
                     </tr>
                     <tr>
                       <td style="background: #f9fafb; padding: 24px 30px; border-top: 1px solid #e5e7eb;">
                         <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; line-height: 1.5;">Jika Anda tidak mendaftar di SmartBudget Assistant, abaikan email ini dengan aman.</p>
-                        <p style="margin: 0; color: #9ca3af; font-size: 12px;">© 2025 SmartBudget Assistant</p>
+                        <p style="margin: 0; color: #9ca3af; font-size: 12px;">-� 2025 SmartBudget Assistant</p>
                       </td>
                     </tr>
                   </table>
@@ -289,7 +321,7 @@ Jangan bagikan kode ini kepada siapa pun.
 
 Jika Anda tidak mendaftar, abaikan email ini.
 
-© 2025 SmartBudget Assistant"""
+-� 2025 SmartBudget Assistant"""
 
     # Try SendGrid first
     print(f"[EMAIL] Sending OTP to {to_email}...")
@@ -335,7 +367,7 @@ def send_password_reset_email(
 
     print(f"[EMAIL] Sending reset email to {to_email}...")
 
-    reset_url = f"{APP_URL}/reset-password.html?token={reset_token}"
+    reset_url = f"{APP_URL}/reset-password.html%stoken={reset_token}"
     greeting = f"Halo {user_name}," if user_name else "Halo,"
     subject = "Reset Password - SmartBudget Assistant"
 
@@ -357,7 +389,7 @@ def send_password_reset_email(
                     <tr>
                       <td style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 40px 30px; text-align: center;">
                         <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
-                          🔐 Reset Password
+                          =��� Reset Password
                         </h1>
                         <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 14px; font-weight: 400;">
                           SmartBudget Assistant
@@ -405,7 +437,7 @@ def send_password_reset_email(
                       <td style="padding: 0 30px 40px 30px;">
                         <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 6px;">
                           <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.5;">
-                            <strong>⚠️ Penting:</strong> Tautan ini akan kedaluwarsa dalam <strong>1 jam</strong> untuk keamanan akun Anda.
+                            <strong>G��n+� Penting:</strong> Tautan ini akan kedaluwarsa dalam <strong>1 jam</strong> untuk keamanan akun Anda.
                           </p>
                         </div>
                       </td>
@@ -422,7 +454,7 @@ def send_password_reset_email(
                         </p>
                         <hr style="margin: 20px 0; border: none; border-top: 1px solid #e5e7eb;">
                         <p style="margin: 0; color: #9ca3af; font-size: 11px; text-align: center;">
-                          © 2025 SmartBudget Assistant. All rights reserved.
+                          -� 2025 SmartBudget Assistant. All rights reserved.
                         </p>
                       </td>
                     </tr>
@@ -448,13 +480,13 @@ Klik tautan berikut untuk mereset password:
 {reset_url}
 
 PENTING:
-• Tautan ini akan kedaluwarsa dalam 1 jam
-• Jika Anda tidak meminta reset password, abaikan email ini
-• Password Anda tidak akan diubah kecuali Anda mengklik tautan di atas
+G�� Tautan ini akan kedaluwarsa dalam 1 jam
+G�� Jika Anda tidak meminta reset password, abaikan email ini
+G�� Password Anda tidak akan diubah kecuali Anda mengklik tautan di atas
 
 ---
 Email otomatis - Jangan balas email ini
-© 2025 SmartBudget Assistant
+-� 2025 SmartBudget Assistant
         """
 
     # Try SendGrid first
@@ -489,7 +521,7 @@ Email otomatis - Jangan balas email ini
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_FROM, to_email, msg.as_string())
 
-        print(f"[EMAIL] ✅ Reset email sent via SMTP to {to_email}")
+        print(f"[EMAIL] G�� Reset email sent via SMTP to {to_email}")
         return True
     except Exception as e:
         print(f"[EMAIL ERROR] Failed to send reset email: {e}")
@@ -497,7 +529,7 @@ Email otomatis - Jangan balas email ini
 
 
 # --- Utilities ---
-def _normalize_date_iso(value: str | None) -> str | None:
+def _normalize_date_iso(value):
     """Normalize natural-language date to ISO YYYY-MM-DD if possible.
     Returns ISO string or None if cannot parse.
     """
@@ -549,7 +581,7 @@ def parse_financial_intent(raw_text: str, today_str: str):
     # Examples: 25,000 ; 25.000 ; 25000 ; 25 ribu ; 14 juta ; 14jt ; 30k
     amt = None
     # juta / jt pattern (e.g. 14jt, 14 juta, 2.5 juta)
-    m_juta = re.search(r"(\d+(?:[\.,]\d+)?)\s*(?:juta|jt)\b", text)
+    m_juta = re.search(r"(\d+(%s:[\.,]\d+)%s)\s*(%s:juta|jt)\b", text)
     if m_juta:
         base = (
             m_juta.group(1).replace(".", ".").replace(",", ".")
@@ -569,7 +601,7 @@ def parse_financial_intent(raw_text: str, today_str: str):
                 pass
     # plain number with thousand separators
     if amt is None:
-        m_num = re.search(r"(\d{1,3}(?:[\.,]\d{3})+|\d{3,})", text)
+        m_num = re.search(r"(\d{1,3}(%s:[\.,]\d{3})+|\d{3,})", text)
         if m_num:
             num_raw = m_num.group(1).replace(".", "").replace(",", "")
             try:
@@ -578,7 +610,7 @@ def parse_financial_intent(raw_text: str, today_str: str):
                 pass
     # short forms like 25k
     if amt is None:
-        m_k = re.search(r"(\d+(?:\.\d+)?)\s*k\b", text)
+        m_k = re.search(r"(\d+(%s:\.\d+)%s)\s*k\b", text)
         if m_k:
             try:
                 amt = float(m_k.group(1)) * 1000
@@ -686,7 +718,7 @@ def register_send_otp():
     if len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters"}), 400
 
-    cur = db.execute("SELECT id FROM users WHERE email = ?", (email,))
+    cur = db.execute("SELECT id FROM users WHERE email = %s", (email,))
     if cur.fetchone():
         return jsonify({"error": "Email already registered"}), 400
 
@@ -701,11 +733,11 @@ def register_send_otp():
     password_hash = generate_password_hash(password)
 
     # Delete old OTPs for this email
-    db.execute("DELETE FROM registration_otps WHERE email = ?", (email,))
+    db.execute("DELETE FROM registration_otps WHERE email = %s", (email,))
 
     # Insert new OTP
     db.execute(
-        "INSERT INTO registration_otps (email, otp_code, name, password_hash, expires_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO registration_otps (email, otp_code, name, password_hash, expires_at) VALUES (%s, %s, %s, %s, %s)",
         (email, otp_code, name, password_hash, expires_at),
     )
     db.commit()
@@ -736,7 +768,7 @@ def register_verify_otp():
 
         # Get OTP record
         cur = db.execute(
-            "SELECT * FROM registration_otps WHERE email = ? AND otp_code = ?",
+            "SELECT * FROM registration_otps WHERE email = %s AND otp_code = %s",
             (email, otp_code),
         )
         otp_record = cur.fetchone()
@@ -759,19 +791,19 @@ def register_verify_otp():
             expires_at = expires_at.replace(tzinfo=wib)
 
         if now > expires_at:
-            db.execute("DELETE FROM registration_otps WHERE email = ?", (email,))
+            db.execute("DELETE FROM registration_otps WHERE email = %s", (email,))
             db.commit()
             return jsonify({"error": "OTP expired. Please request a new one"}), 400
 
         print(f"[DEBUG] Creating user account for {email}")
         # Create user account with ocr_enabled = false by default
         db.execute(
-            "INSERT INTO users (name, email, password_hash, role, ocr_enabled) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO users (name, email, password_hash, role, ocr_enabled) VALUES (%s, %s, %s, %s, %s)",
             (otp_record["name"], email, otp_record["password_hash"], "user", False),
         )
 
         # Delete used OTP
-        db.execute("DELETE FROM registration_otps WHERE email = ?", (email,))
+        db.execute("DELETE FROM registration_otps WHERE email = %s", (email,))
         db.commit()
 
         print(f"[DEBUG] Registration successful for {email}")
@@ -808,7 +840,7 @@ def login_api():
         return jsonify({"error": get_message("email_password_required", lang)}), 400
 
     cur = db.execute(
-        "SELECT id, name, email, password_hash, role FROM users WHERE email = ?",
+        "SELECT id, name, email, password_hash, role FROM users WHERE email = %s",
         (email,),
     )
     user = cur.fetchone()
@@ -829,7 +861,7 @@ def login_api():
         "%Y-%m-%d %H:%M:%S"
     )
     db.execute(
-        "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (?, ?, ?)",
+        "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (%s, %s, %s)",
         (user["id"], token, expires_at),
     )
     db.commit()
@@ -856,7 +888,7 @@ def logout_api():
         "session_token"
     )
     if token:
-        db.execute("DELETE FROM sessions WHERE session_token = ?", (token,))
+        db.execute("DELETE FROM sessions WHERE session_token = %s", (token,))
         db.commit()
     return jsonify({"status": "ok"}), 200
 
@@ -875,7 +907,7 @@ def delete_account_api():
         return jsonify({"error": get_message("password_required", lang)}), 400
 
     # Verify password
-    cur = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+    cur = db.execute("SELECT password_hash FROM users WHERE id = %s", (user_id,))
     row = cur.fetchone()
     if not row or not check_password_hash(row["password_hash"], password):
         return jsonify({"error": get_message("incorrect_password", lang)}), 401
@@ -883,14 +915,14 @@ def delete_account_api():
     try:
         # Delete all user data (cascade will handle related tables if FK constraints exist)
         # Manual deletion for safety
-        db.execute("DELETE FROM chat_logs WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM chat_summaries WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM chat_log_embeddings WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM savings_goals WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-        db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        db.execute("DELETE FROM chat_logs WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM chat_summaries WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM chat_log_embeddings WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM transactions WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM savings_goals WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM password_resets WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
+        db.execute("DELETE FROM users WHERE id = %s", (user_id,))
         db.commit()
 
         return jsonify(
@@ -913,7 +945,7 @@ def password_forgot_api():
     if not email:
         return jsonify({"error": get_message("email_required", lang)}), 400
 
-    cur = db.execute("SELECT id, name FROM users WHERE email = ?", (email,))
+    cur = db.execute("SELECT id, name FROM users WHERE email = %s", (email,))
     row = cur.fetchone()
 
     # If email not registered, return explicit error (per product request)
@@ -928,10 +960,10 @@ def password_forgot_api():
 
     try:
         # Remove any existing tokens for this user
-        db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM password_resets WHERE user_id = %s", (user_id,))
         # Insert new token
         db.execute(
-            "INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)",
+            "INSERT INTO password_resets (user_id, token, expires_at) VALUES (%s, %s, %s)",
             (user_id, token, expires_at),
         )
         db.commit()
@@ -955,7 +987,7 @@ def password_forgot_api():
     response_data = {
         "status": "ok",
         "message": "Reset link created. Check server logs for the link (dev mode).",
-        "reset_url": f"/reset-password.html?token={token}",
+        "reset_url": f"/reset-password.html%stoken={token}",
         "dev_mode": True,
     }
     return jsonify(response_data), 200
@@ -975,7 +1007,7 @@ def verify_reset_token_api():
         """SELECT pr.expires_at, u.email 
            FROM password_resets pr 
            JOIN users u ON pr.user_id = u.id 
-           WHERE pr.token = ?""",
+           WHERE pr.token = %s""",
         (token,),
     )
     row = cur.fetchone()
@@ -1023,7 +1055,7 @@ def password_reset_api():
         return jsonify({"error": get_message("password_min_length", lang)}), 400
 
     cur = db.execute(
-        "SELECT user_id, expires_at FROM password_resets WHERE token = ?",
+        "SELECT user_id, expires_at FROM password_resets WHERE token = %s",
         (token,),
     )
     row = cur.fetchone()
@@ -1046,7 +1078,7 @@ def password_reset_api():
     wib_now = datetime.now(timezone(timedelta(hours=7))).replace(tzinfo=None)
     if exp_dt < wib_now:
         # Remove expired token
-        db.execute("DELETE FROM password_resets WHERE token = ?", (token,))
+        db.execute("DELETE FROM password_resets WHERE token = %s", (token,))
         db.commit()
         return jsonify({"error": get_message("token_expired", lang)}), 400
 
@@ -1055,9 +1087,10 @@ def password_reset_api():
     try:
         password_hash = generate_password_hash(new_password)
         db.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id)
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (password_hash, user_id),
         )
-        db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+        db.execute("DELETE FROM password_resets WHERE user_id = %s", (user_id,))
         db.commit()
         return jsonify(
             {"status": "ok", "message": get_message("password_reset_success", lang)}
@@ -1076,7 +1109,7 @@ def me_api():
     user = g.user
     db = get_db()
     cur = db.execute(
-        "SELECT name, email, avatar_url, phone, bio, role, ocr_enabled FROM users WHERE id = ?",
+        "SELECT name, email, avatar_url, phone, bio, role, ocr_enabled, ai_provider, ai_model FROM users WHERE id = %s",
         (user["id"],),
     )
     user_data = cur.fetchone()
@@ -1092,6 +1125,8 @@ def me_api():
             "bio": user_data["bio"],
             "role": user_data["role"],
             "ocr_enabled": bool(user_data.get("ocr_enabled", False)),
+            "ai_provider": user_data.get("ai_provider", "google"),
+            "ai_model": user_data.get("ai_model", "gemini-2.0-flash-lite"),
         }
     ), 200
 
@@ -1106,25 +1141,37 @@ def update_profile_api():
     phone = data.get("phone", "").strip()
     bio = data.get("bio", "").strip()
     ocr_enabled = data.get("ocr_enabled")
+    ai_provider = data.get("ai_provider")
+    ai_model = data.get("ai_model")
 
     if not name:
         return jsonify({"error": "Nama tidak boleh kosong"}), 400
 
     try:
+        # Build the UPDATE query dynamically based on provided fields
+        update_fields = ["name = %s", "phone = %s", "bio = %s"]
+        values = [name, phone, bio]
+
         if ocr_enabled is not None:
-            db.execute(
-                "UPDATE users SET name = ?, phone = ?, bio = ?, ocr_enabled = ? WHERE id = ?",
-                (name, phone, bio, bool(ocr_enabled), user_id),
-            )
-        else:
-            db.execute(
-                "UPDATE users SET name = ?, phone = ?, bio = ? WHERE id = ?",
-                (name, phone, bio, user_id),
-            )
+            update_fields.append("ocr_enabled = %s")
+            values.append(bool(ocr_enabled))
+
+        if ai_provider is not None:
+            update_fields.append("ai_provider = %s")
+            values.append(ai_provider)
+
+        if ai_model is not None:
+            update_fields.append("ai_model = %s")
+            values.append(ai_model)
+
+        values.append(user_id)
+
+        query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = %s"
+        db.execute(query, values)
         db.commit()
 
         cur = db.execute(
-            "SELECT name, email, avatar_url, phone, bio, ocr_enabled FROM users WHERE id = ?",
+            "SELECT name, email, avatar_url, phone, bio, ocr_enabled, ai_provider, ai_model FROM users WHERE id = %s",
             (user_id,),
         )
         updated_user = cur.fetchone()
@@ -1140,6 +1187,8 @@ def update_profile_api():
                     "phone": updated_user["phone"],
                     "bio": updated_user["bio"],
                     "ocr_enabled": bool(updated_user.get("ocr_enabled", False)),
+                    "ai_provider": updated_user.get("ai_provider", "google"),
+                    "ai_model": updated_user.get("ai_model", "gemini-2.0-flash-lite"),
                 },
             }
         ), 200
@@ -1163,7 +1212,7 @@ def update_password_api():
         return jsonify({"error": "Password minimal harus 6 karakter"}), 400
 
     if current_password:
-        cur = db.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+        cur = db.execute("SELECT password_hash FROM users WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user or not check_password_hash(user["password_hash"], current_password):
             return jsonify({"error": "Password saat ini salah"}), 403
@@ -1171,7 +1220,8 @@ def update_password_api():
     try:
         password_hash = generate_password_hash(new_password)
         db.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?", (password_hash, user_id)
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (password_hash, user_id),
         )
         db.commit()
         return jsonify({"status": "ok", "message": "Password berhasil diupdate"}), 200
@@ -1217,7 +1267,7 @@ def admin_users_api():
         if role not in ["admin", "user"]:
             return jsonify({"error": "Invalid role"}), 400
 
-        cur = db.execute("SELECT id FROM users WHERE email = ?", (email,))
+        cur = db.execute("SELECT id FROM users WHERE email = %s", (email,))
         if cur.fetchone():
             return jsonify({"error": "Email already registered"}), 400
 
@@ -1226,7 +1276,7 @@ def admin_users_api():
             # Admin gets OCR enabled by default, users get false
             ocr_enabled = True if role == "admin" else False
             db.execute(
-                "INSERT INTO users (name, email, password_hash, role, ocr_enabled) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO users (name, email, password_hash, role, ocr_enabled) VALUES (%s, %s, %s, %s, %s)",
                 (name, email, password_hash, role, ocr_enabled),
             )
             db.commit()
@@ -1265,23 +1315,23 @@ def admin_user_detail_api(user_id):
                 password_hash = generate_password_hash(password)
                 if ocr_enabled is not None:
                     db.execute(
-                        "UPDATE users SET name = ?, email = ?, role = ?, password_hash = ?, ocr_enabled = ? WHERE id = ?",
+                        "UPDATE users SET name = %s, email = %s, role = %s, password_hash = %s, ocr_enabled = %s WHERE id = %s",
                         (name, email, role, password_hash, bool(ocr_enabled), user_id),
                     )
                 else:
                     db.execute(
-                        "UPDATE users SET name = ?, email = ?, role = ?, password_hash = ? WHERE id = ?",
+                        "UPDATE users SET name = %s, email = %s, role = %s, password_hash = %s WHERE id = %s",
                         (name, email, role, password_hash, user_id),
                     )
             else:
                 if ocr_enabled is not None:
                     db.execute(
-                        "UPDATE users SET name = ?, email = ?, role = ?, ocr_enabled = ? WHERE id = ?",
+                        "UPDATE users SET name = %s, email = %s, role = %s, ocr_enabled = %s WHERE id = %s",
                         (name, email, role, bool(ocr_enabled), user_id),
                     )
                 else:
                     db.execute(
-                        "UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?",
+                        "UPDATE users SET name = %s, email = %s, role = %s WHERE id = %s",
                         (name, email, role, user_id),
                     )
             db.commit()
@@ -1294,10 +1344,10 @@ def admin_user_detail_api(user_id):
 
     elif request.method == "DELETE":
         try:
-            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-            db.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
-            db.execute("DELETE FROM savings_goals WHERE user_id = ?", (user_id,))
-            db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            db.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
+            db.execute("DELETE FROM transactions WHERE user_id = %s", (user_id,))
+            db.execute("DELETE FROM savings_goals WHERE user_id = %s", (user_id,))
+            db.execute("DELETE FROM users WHERE id = %s", (user_id,))
             db.commit()
             return jsonify(
                 {"status": "ok", "message": "User deleted successfully"}
@@ -1330,11 +1380,29 @@ def transactions_api():
             date_str = nd
         else:
             date_str = _wib_today_iso()
-        tx_type = data.get("type")
-        category = data.get("category") or "uncategorized"
-        description = data.get("description") or ""
-        amount = float(data.get("amount") or 0)
-        account = data.get("account") or ""
+        tx_type = (data.get("type") or "").strip().lower()
+        category = (data.get("category") or "uncategorized").strip()
+        description = (data.get("description") or "").strip()
+        amount_raw = data.get("amount")
+        try:
+            amount = float(amount_raw)
+        except Exception:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "need_amount",
+                    "ask_user": "Jumlah harus berupa angka.",
+                }
+            ), 400
+        account = (data.get("account") or "").strip()
+
+        # Input hardening
+        if len(description) > 500:
+            description = description[:500]
+        if len(category) > 120:
+            category = category[:120]
+        if len(account) > 120:
+            account = account[:120]
 
         # Clarification-friendly validation
         if tx_type not in ("income", "expense", "transfer"):
@@ -1342,63 +1410,94 @@ def transactions_api():
                 {
                     "success": False,
                     "message": "need_type",
-                    "ask_user": "Apakah ini pemasukan (income), pengeluaran (expense), atau transfer?",
+                    "ask_user": "Apakah ini pemasukan (income), pengeluaran (expense), atau transfer%s",
                 }
             ), 400
-        if amount <= 0:
+        if amount <= 0 or amount > 1_000_000_000:
             return jsonify(
                 {
                     "success": False,
                     "message": "need_amount",
-                    "ask_user": "Mohon sebutkan jumlah transaksi dalam rupiah (harus > 0).",
+                    "ask_user": "Mohon sebutkan jumlah transaksi (0 < jumlah <= 1 miliar).",
                 }
             ), 400
-        if tx_type == "expense" and not (data.get("category") or "").strip():
+        if tx_type in ("expense", "income") and not category:
             return jsonify(
                 {
                     "success": False,
                     "message": "need_category",
-                    "ask_user": "Mohon sebutkan kategori pengeluaran (contoh: Makan, Transport, Belanja).",
-                }
-            ), 400
-        if tx_type == "income" and not (data.get("category") or "").strip():
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "need_category",
-                    "ask_user": "Mohon sebutkan kategori pemasukan (contoh: Gaji, Bonus, Penjualan, Investasi).",
+                    "ask_user": "Mohon sebutkan kategori transaksi.",
                 }
             ), 400
 
-        db.execute(
-            """INSERT INTO transactions (user_id, date, type, category, description, amount, account)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, date_str, tx_type, category, description, amount, account),
+        # De-dupe guard for rapid duplicate submissions
+        dup_id = _dedupe_recent_transaction(
+            db, user_id, date_str, tx_type, category, amount, account
         )
-        db.commit()
-        return jsonify({"status": "ok"})
+        if dup_id:
+            logger.info(
+                "transaction_dedup_hit",
+                user_id=user_id,
+                date=date_str,
+                type=tx_type,
+                category=category,
+                amount=amount,
+                account=account,
+                duplicate_id=dup_id,
+            )
+            return jsonify({"status": "ok", "duplicate": True, "id": dup_id}), 200
+
+        try:
+            db.execute(
+                """INSERT INTO transactions (user_id, date, type, category, description, amount, account)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (user_id, date_str, tx_type, category, description, amount, account),
+            )
+            db.commit()
+            logger.info(
+                "transaction_recorded",
+                user_id=user_id,
+                type=tx_type,
+                amount=amount,
+                category=category,
+                account=account,
+                date=date_str,
+            )
+            return jsonify({"status": "ok"})
+        except Exception as e:
+            db.rollback()
+            logger.error(
+                "transaction_record_failed",
+                exc=e,
+                user_id=user_id,
+                type=tx_type,
+                amount=amount,
+                category=category,
+                account=account,
+            )
+            return jsonify({"error": f"Transaksi gagal: {str(e)}"}), 500
 
     # GET with filters
     params = [user_id]
-    where = ["user_id = ?"]
+    where = ["user_id = %s"]
 
     if request.args.get("account"):
-        where.append("account = ?")
+        where.append("account = %s")
         params.append(request.args.get("account"))
     if request.args.get("start_date"):
-        where.append("date >= ?")
+        where.append("date >= %s")
         params.append(request.args.get("start_date"))
     if request.args.get("end_date"):
-        where.append("date <= ?")
+        where.append("date <= %s")
         params.append(request.args.get("end_date"))
     if request.args.get("type"):
-        where.append("type = ?")
+        where.append("type = %s")
         params.append(request.args.get("type"))
     if request.args.get("category"):
-        where.append("category = ?")
+        where.append("category = %s")
         params.append(request.args.get("category"))
     if request.args.get("q"):
-        where.append("description LIKE ?")
+        where.append("description LIKE %s")
         params.append(f"%{request.args.get('q')}%")
 
     sql = f"""SELECT id, date, type, category, description, amount, account, created_at
@@ -1428,7 +1527,7 @@ def transaction_detail_api(tx_id):
     user_id = g.user["id"]
 
     cur = db.execute(
-        "SELECT id FROM transactions WHERE id = ? AND user_id = ?", (tx_id, user_id)
+        "SELECT id FROM transactions WHERE id = %s AND user_id = %s", (tx_id, user_id)
     )
     if not cur.fetchone():
         return jsonify({"error": "Transaksi tidak ditemukan"}), 404
@@ -1450,8 +1549,8 @@ def transaction_detail_api(tx_id):
             return jsonify({"error": "amount harus > 0"}), 400
 
         db.execute(
-            """UPDATE transactions SET date = ?, type = ?, category = ?, description = ?, amount = ?, account = ?
-            WHERE id = ? AND user_id = ?""",
+            """UPDATE transactions SET date = %s, type = %s, category = %s, description = %s, amount = %s, account = %s
+            WHERE id = %s AND user_id = %s""",
             (date_str, tx_type, category, description, amount, account, tx_id, user_id),
         )
         db.commit()
@@ -1459,7 +1558,7 @@ def transaction_detail_api(tx_id):
 
     elif request.method == "DELETE":
         db.execute(
-            "DELETE FROM transactions WHERE id = ? AND user_id = ?", (tx_id, user_id)
+            "DELETE FROM transactions WHERE id = %s AND user_id = %s", (tx_id, user_id)
         )
         db.commit()
         return jsonify({"status": "ok", "message": "Transaksi berhasil dihapus"})
@@ -1482,11 +1581,11 @@ def balance_api():
     user_id = g.user["id"]
     db = get_db()
     account_filter = request.args.get("account")
-    where_clause = "user_id = ? AND type IN ('income', 'expense')"
+    where_clause = "user_id = %s AND type IN ('income', 'expense')"
     params = [user_id]
 
     if account_filter:
-        where_clause += " AND account = ?"
+        where_clause += " AND account = %s"
         params.append(account_filter)
 
     cur = db.execute(
@@ -1535,7 +1634,7 @@ def accounts_api():
             """SELECT SUM(CASE WHEN type = 'income' THEN amount
                                WHEN type = 'expense' THEN -amount
                                ELSE amount END) AS balance
-            FROM transactions WHERE user_id = ? AND account = ?""",
+            FROM transactions WHERE user_id = %s AND account = %s""",
             (user_id, acc),
         )
         row = cur.fetchone()
@@ -1617,10 +1716,9 @@ def transfer_api():
         ), 400
 
     try:
-        db.execute("BEGIN")
         db.execute(
             """INSERT INTO transactions (user_id, date, type, category, description, amount, account)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             (
                 user_id,
                 date_str,
@@ -1633,7 +1731,7 @@ def transfer_api():
         )
         db.execute(
             """INSERT INTO transactions (user_id, date, type, category, description, amount, account)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             (
                 user_id,
                 date_str,
@@ -1645,6 +1743,14 @@ def transfer_api():
             ),
         )
         db.commit()
+        logger.info(
+            "transfer_recorded",
+            user_id=user_id,
+            amount=amount,
+            from_account=from_account,
+            to_account=to_account,
+            date=date_str,
+        )
         return jsonify(
             {
                 "status": "ok",
@@ -1653,6 +1759,14 @@ def transfer_api():
         )
     except Exception as e:
         db.rollback()
+        logger.error(
+            "transfer_failed",
+            exc=e,
+            user_id=user_id,
+            amount=amount,
+            from_account=from_account,
+            to_account=to_account,
+        )
         return jsonify({"error": f"Transfer gagal: {str(e)}"}), 500
 
 
@@ -1666,7 +1780,7 @@ def savings_api():
     if request.method == "GET":
         cur = db.execute(
             """SELECT id, name, target_amount, current_amount, description, target_date
-            FROM savings_goals WHERE user_id = ? ORDER BY created_at DESC""",
+            FROM savings_goals WHERE user_id = %s ORDER BY created_at DESC""",
             (user_id,),
         )
         rows = [
@@ -1701,7 +1815,7 @@ def savings_api():
 
         db.execute(
             """INSERT INTO savings_goals (user_id, name, target_amount, current_amount, description, target_date)
-            VALUES (?, ?, ?, ?, ?, ?)""",
+            VALUES (%s, %s, %s, %s, %s, %s)""",
             (user_id, name, target_amount, current_amount, description, target_date),
         )
         db.commit()
@@ -1715,7 +1829,7 @@ def savings_api():
             return jsonify({"error": "id harus disediakan"}), 400
 
         cur = db.execute(
-            "SELECT id FROM savings_goals WHERE id = ? AND user_id = ?",
+            "SELECT id FROM savings_goals WHERE id = %s AND user_id = %s",
             (goal_id, user_id),
         )
         if not cur.fetchone():
@@ -1725,13 +1839,13 @@ def savings_api():
         params = []
 
         if "name" in data and data["name"]:
-            updates.append("name = ?")
+            updates.append("name = %s")
             params.append(data["name"])
         if "target_amount" in data and float(data.get("target_amount", 0)) > 0:
-            updates.append("target_amount = ?")
+            updates.append("target_amount = %s")
             params.append(float(data["target_amount"]))
         if "description" in data:
-            updates.append("description = ?")
+            updates.append("description = %s")
             params.append(data["description"])
         if "target_date" in data:
             td = (data.get("target_date") or "").strip()
@@ -1746,7 +1860,7 @@ def savings_api():
                         }
                     ), 400
                 td = nd
-            updates.append("target_date = ?")
+            updates.append("target_date = %s")
             params.append(td or None)
 
         if not updates:
@@ -1759,7 +1873,7 @@ def savings_api():
             )
 
         params.extend([goal_id, user_id])
-        sql = f"UPDATE savings_goals SET {', '.join(updates)} WHERE id = ? AND user_id = ?"
+        sql = f"UPDATE savings_goals SET {', '.join(updates)} WHERE id = %s AND user_id = %s"
         db.execute(sql, params)
         db.commit()
         return jsonify({"status": "ok", "message": "Target tabungan berhasil diupdate"})
@@ -1772,7 +1886,8 @@ def savings_api():
             return jsonify({"error": "id harus disediakan"}), 400
 
         db.execute(
-            "DELETE FROM savings_goals WHERE id = ? AND user_id = ?", (goal_id, user_id)
+            "DELETE FROM savings_goals WHERE id = %s AND user_id = %s",
+            (goal_id, user_id),
         )
         db.commit()
         return jsonify({"status": "ok", "message": "Savings goal deleted"})
@@ -1832,7 +1947,7 @@ def transfer_to_savings_api():
         db.execute("BEGIN")
 
         goal_cur = db.execute(
-            "SELECT name, current_amount FROM savings_goals WHERE id = ? AND user_id = ?",
+            "SELECT name, current_amount FROM savings_goals WHERE id = %s AND user_id = %s",
             (goal_id, user_id),
         )
         goal = goal_cur.fetchone()
@@ -1841,7 +1956,7 @@ def transfer_to_savings_api():
 
         db.execute(
             """INSERT INTO transactions (user_id, date, type, category, description, amount, account)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             (
                 user_id,
                 date_str,
@@ -1855,7 +1970,7 @@ def transfer_to_savings_api():
 
         new_amount = float(goal["current_amount"]) + float(amount)
         db.execute(
-            "UPDATE savings_goals SET current_amount = ? WHERE id = ?",
+            "UPDATE savings_goals SET current_amount = %s WHERE id = %s",
             (new_amount, goal_id),
         )
 
@@ -1879,11 +1994,22 @@ def chat_api():
     # Handle both JSON and multipart form data (for image uploads)
     image_file = None
     image_data = None
+    data = {}  # Initialize data dict for both cases
+
     if request.content_type and "multipart/form-data" in request.content_type:
         # Image upload
         user_message = (request.form.get("message") or "").strip()
         lang = request.form.get("lang", "id")
         provider = request.form.get("model_provider", "google")
+        model_id = request.form.get("model") or None
+
+        # Get session_id from form if present
+        session_id_str = request.form.get("session_id")
+        if session_id_str:
+            try:
+                data["session_id"] = int(session_id_str)
+            except (ValueError, TypeError):
+                data["session_id"] = None
 
         if "image" in request.files:
             image_file = request.files["image"]
@@ -1901,6 +2027,7 @@ def chat_api():
         user_message = (data.get("message") or "").strip()
         lang = data.get("lang", "id")
         provider = data.get("model_provider", "google")
+        model_id = data.get("model") or None
 
     print(f"\n{'=' * 60}")
     print("[DEBUG] === CHAT API ENDPOINT DIPANGGIL ===")
@@ -1916,7 +2043,7 @@ def chat_api():
     if image_data:
         db = get_db()
         user_row = db.execute(
-            "SELECT ocr_enabled FROM users WHERE id = ?", (user_id,)
+            "SELECT ocr_enabled FROM users WHERE id = %s", (user_id,)
         ).fetchone()
 
         if not user_row or not user_row.get("ocr_enabled"):
@@ -1927,19 +2054,31 @@ def chat_api():
                 }
             ), 403
 
-    year = int(
-        request.form.get("year") or request.get_json().get("year")
-        if request.get_json()
-        else None or today.year
-    )
-    month = int(
-        request.form.get("month") or request.get_json().get("month")
-        if request.get_json()
-        else None or today.month
-    )
+    # Parse year and month safely
+    year_val = None
+    month_val = None
+
+    if request.content_type and "multipart/form-data" in request.content_type:
+        year_val = request.form.get("year")
+        month_val = request.form.get("month")
+    else:
+        data = request.get_json() or {}
+        year_val = data.get("year")
+        month_val = data.get("month")
+
+    year = int(year_val) if year_val else today.year
+    month = int(month_val) if month_val else today.month
     provider = provider or "google"
 
+    # Use provided model_id or fallback to defaults
+    if not model_id:
+        if provider == "openai":
+            model_id = "gpt-4o-mini"
+        else:
+            model_id = "gemini-2.5-flash"
+
     print(f"[DEBUG] Provider: {provider}")
+    print(f"[DEBUG] Model: {model_id}")
     print(f"[DEBUG] Language: {lang}")
     print(f"[DEBUG] Year/Month: {year}/{month}\n")
 
@@ -1949,12 +2088,12 @@ def chat_api():
         # Create new session
         db = get_db()
         db.execute(
-            "INSERT INTO chat_sessions (user_id, title) VALUES (?, ?)",
+            "INSERT INTO chat_sessions (user_id, title) VALUES (%s, %s)",
             (user_id, "New Chat"),
         )
         db.commit()
         cur = db.execute(
-            "SELECT id FROM chat_sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT id FROM chat_sessions WHERE user_id = %s ORDER BY created_at DESC LIMIT 1",
             (user_id,),
         )
         row = cur.fetchone()
@@ -1966,7 +2105,7 @@ def chat_api():
     ctx = build_financial_context(user_id, year, month)
     mem_ctx = build_memory_context(user_id)
     db = get_db()
-    row = db.execute("SELECT name FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = db.execute("SELECT name FROM users WHERE id = %s", (user_id,)).fetchone()
     user_name = row["name"] if row else "Teman"
 
     wib = timezone(timedelta(hours=7))
@@ -1975,7 +2114,7 @@ def chat_api():
     if lang == "en":
         base_prompt = (
             f"You are FIN, a concise finance assistant for {user_name}. "
-            f"Current time: {time_str}. After executing tools, output status lines (✅/❌) before explanation. "
+            f"Current time: {time_str}. After executing tools, output status lines (G��/G��) before explanation. "
             f"CRITICAL RULES:\n"
             f"1. For INCOME: 'category' is REQUIRED (e.g., Salary, Bonus, Sales). ASK if not specified.\n"
             f"2. For EXPENSE: 'category' is required. ASK if unclear.\n"
@@ -1988,7 +2127,7 @@ def chat_api():
     else:
         base_prompt = (
             f"Kamu FIN, asisten keuangan ringkas untuk {user_name}. "
-            f"Waktu: {time_str}. Setelah eksekusi tool tampilkan baris status (✅/❌) sebelum penjelasan. "
+            f"Waktu: {time_str}. Setelah eksekusi tool tampilkan baris status (G��/G��) sebelum penjelasan. "
             f"ATURAN KRITIS:\n"
             f"1. Untuk PEMASUKAN: 'category' WAJIB jelas (contoh: Gaji, Bonus, Penjualan). TANYA jika tidak disebutkan.\n"
             f"2. Untuk PENGELUARAN: 'category' wajib ada. TANYA jika tidak jelas.\n"
@@ -1998,6 +2137,32 @@ def chat_api():
             f"6. JANGAN gunakan nilai auto-detected untuk field kritis - selalu konfirmasi dengan user dulu."
         )
         user_prompt = f"Tanggal: {today.isoformat()}\nKonteks:\n{ctx}\n\nMemori:\n{mem_ctx}\n\nUser: {user_message}"
+
+    # === CONVERSATION STATE MANAGEMENT ===
+    # Check if there's an active multi-turn conversation state for this session
+    state_context = ""
+    active_state = ConversationStateManager.get_session_state(session_id)
+
+    if active_state and active_state.get("success"):
+        state_data = active_state.get("state", {})
+        intent = state_data.get("intent")
+        state = state_data.get("state")
+        partial_data = state_data.get("partial_data", {})
+        next_prompt = state_data.get("next_prompt", "")
+
+        print("[DEBUG] Active Conversation State Detected!")
+        print(f"[DEBUG] Intent: {intent}, State: {state}")
+        print(f"[DEBUG] Partial Data: {partial_data}\n")
+
+        # Add state context to prompt to help LLM understand multi-turn flow
+        if lang == "en":
+            state_context = f"\n\n[ACTIVE STATE] User is in '{state}' of '{intent}' flow.\nCurrent progress: {json.dumps(partial_data)}\nNext question: {next_prompt}\nIMPORTANT: If user confirms, update state with 'confirm'=true. If they provide field value, extract and update."
+        else:
+            state_context = f"\n\n[STATUS AKTIF] User sedang dalam '{state}' dari alur '{intent}'.\nProgress: {json.dumps(partial_data)}\nPertanyaan lanjutan: {next_prompt}\nPENTING: Jika user konfirmasi, update state dengan 'confirm'=true. Jika mereka sebutkan value field, ekstrak dan update."
+
+        user_prompt += state_context
+
+    # === END STATE MANAGEMENT ===
 
     # PROVIDER: OPENAI
     if provider == "openai":
@@ -2015,7 +2180,7 @@ def chat_api():
                 user_content = user_prompt
 
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model_id,
                 messages=[
                     {"role": "system", "content": base_prompt},
                     {"role": "user", "content": user_content},
@@ -2032,6 +2197,33 @@ def chat_api():
                 print(f"{'=' * 60}\n")
 
                 results = []
+
+                # === MAP TOOL CALLS TO INTENTS FOR STATE MANAGEMENT ===
+                # Map LLM tool names to state machine intents
+                intent_map = {
+                    "add_transaction": "add_transaction",
+                    "edit_transaction": "edit_transaction",
+                    "delete_transaction": "delete_transaction",
+                    "transfer_funds": "transfer",
+                    "create_savings_goal": "create_goal",
+                }
+
+                # Detect intent from first tool call (usually only 1 per turn in multi-turn flows)
+                first_tool_name = msg.tool_calls[0].function.name
+                detected_intent = intent_map.get(first_tool_name)
+
+                if detected_intent:
+                    print(f"[DEBUG] Detected Intent for State Mgmt: {detected_intent}")
+                    # Check if we need to initialize state (only if no active state)
+                    if not active_state or not active_state.get("success"):
+                        success, init_result = ConversationStateManager.init_state(
+                            user_id, session_id, detected_intent
+                        )
+                        if success:
+                            print(f"[DEBUG] State initialized: {init_result}")
+
+                # === END INTENT DETECTION ===
+
                 for tc in msg.tool_calls:
                     fn_name = tc.function.name
                     fn_args = json.loads(tc.function.arguments)
@@ -2048,9 +2240,45 @@ def chat_api():
                     print(f"[DEBUG] Tool Result: {result}")
                     print(f"{'=' * 60}\n")
 
+                    # === UPDATE CONVERSATION STATE IF APPLICABLE ===
+                    if detected_intent and result.get("success"):
+                        # Extract field values from fn_args to update state
+                        # Map tool parameters to state manager field names
+                        param_to_field_map = {
+                            "amount": "amount",
+                            "category": "category",
+                            "account": "account",
+                            "from_account": "from_account",
+                            "to_account": "to_account",
+                            "field_name": "field_name",
+                            "new_value": "new_value",
+                            "transaction_id": "transaction_id",
+                            "password": "password",
+                            "name": "name",
+                            "target_amount": "target_amount",
+                            "deadline": "deadline",
+                            "confirm": "confirm",
+                        }
+
+                        # Update state with each extracted field
+                        for param_key, state_field in param_to_field_map.items():
+                            if param_key in fn_args:
+                                value = fn_args[param_key]
+                                success, update_result = (
+                                    ConversationStateManager.update_field(
+                                        session_id, state_field, value
+                                    )
+                                )
+                                if success:
+                                    print(
+                                        f"[DEBUG] State updated: {state_field}={value}"
+                                    )
+
+                    # === END STATE UPDATE ===
+
                 summary = "\n".join(
                     [
-                        ("✅" if r["success"] else "❌") + " " + r["message"]
+                        ("G��" if r["success"] else "G��") + " " + r["message"]
                         for r in results
                     ]
                 )
@@ -2112,7 +2340,7 @@ def chat_api():
                     maybe_update_summary(user_id)
                     return jsonify({"answer": summary, "session_id": session_id}), 200
 
-                # All good → add a brief explanation
+                # All good G�� add a brief explanation
                 explain_prompt = (
                     "Ringkas hasil (maks 5 kalimat) tanpa ubah simbol."
                     if lang != "en"
@@ -2143,8 +2371,11 @@ def chat_api():
             return jsonify({"error": f"OpenAI error: {e}"}), 500
 
     # PROVIDER: GEMINI
-    if provider == "google" and gemini_model:
+    if provider == "google":
         try:
+            # Initialize Gemini model dynamically with selected model_id
+            current_gemini_model = genai.GenerativeModel(model_id)
+
             safety = [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -2211,16 +2442,16 @@ Action tersedia:
 
                 # For Gemini vision
                 content_parts = [prompt, image]
-                resp = gemini_model.generate_content(
+                resp = current_gemini_model.generate_content(
                     content_parts, safety_settings=safety, stream=False
                 )
             else:
-                resp = gemini_model.generate_content(
+                resp = current_gemini_model.generate_content(
                     prompt, safety_settings=safety, stream=False
                 )
             text = resp.text
 
-            jm = re.search(r"```json\s*({.*?})\s*```", text, re.DOTALL)
+            jm = re.search(r"```json\s*({.*%s})\s*```", text, re.DOTALL)
             if jm:
                 try:
                     print(f"\n{'=' * 60}")
@@ -2283,7 +2514,7 @@ Action tersedia:
                             {"answer": answer, "session_id": session_id}
                         ), 200
 
-                    prefix = "✅" if res["success"] else "❌"
+                    prefix = "G��" if res["success"] else "G��"
                     remaining = text.replace(jm.group(0), "").strip()
                     # On failure, avoid appending model's remaining text to prevent mixed messages
                     if not res["success"]:
@@ -2315,657 +2546,6 @@ Action tersedia:
             return jsonify({"error": f"Gemini error: {ge}"}), 500
 
     return jsonify({"error": "Provider tidak valid"}), 400
-
-
-# === MEMORY ENDPOINTS ===
-@app.route("/api/memory/summary", methods=["GET"])
-@require_login
-def memory_summary_api():
-    user_id = g.user["id"]
-    refresh = request.args.get("refresh") == "1"
-    if refresh:
-        summary = maybe_update_summary(user_id)
-    else:
-        summary = get_memory_summary(user_id) or maybe_update_summary(user_id)
-
-    db = get_db()
-    total_logs = (
-        db.execute(
-            "SELECT COUNT(*) AS c FROM llm_logs WHERE user_id = ?", (user_id,)
-        ).fetchone()["c"]
-        or 0
-    )
-    recent = get_recent_dialogue(user_id)
-    cfg = get_effective_config(user_id)
-
-    return jsonify(
-        {
-            "summary_text": summary["summary_text"] if summary else None,
-            "interaction_count": summary["interaction_count"] if summary else 0,
-            "updated_at": summary["updated_at"] if summary else None,
-            "total_logs": total_logs,
-            "recent_dialogue": recent,
-            "config": cfg,
-        }
-    ), 200
-
-
-@app.route("/api/memory/clear", methods=["DELETE"])
-@require_login
-def memory_clear_api():
-    """Clear all chat history and LLM logs for the user to save memory."""
-    user_id = g.user["id"]
-    db = get_db()
-
-    try:
-        # Count logs before deletion for confirmation
-        count_row = db.execute(
-            "SELECT COUNT(*) AS c FROM llm_logs WHERE user_id = ?", (user_id,)
-        ).fetchone()
-        logs_count = count_row["c"] if count_row else 0
-
-        # Delete embeddings first (foreign key constraint)
-        db.execute("DELETE FROM llm_log_embeddings WHERE user_id = ?", (user_id,))
-
-        # Delete logs
-        db.execute("DELETE FROM llm_logs WHERE user_id = ?", (user_id,))
-
-        # Delete memory summary
-        db.execute("DELETE FROM llm_memory_summary WHERE user_id = ?", (user_id,))
-
-        db.commit()
-
-        return jsonify(
-            {
-                "status": "ok",
-                "message": f"Berhasil menghapus {logs_count} riwayat chat dan memory",
-                "deleted_logs": logs_count,
-            }
-        ), 200
-
-    except Exception as e:
-        db.rollback()
-        return jsonify({"error": f"Gagal menghapus riwayat: {str(e)}"}), 500
-
-
-@app.route("/api/memory/logs/<int:log_id>", methods=["DELETE"])
-@require_login
-def memory_delete_log_api(log_id):
-    """Delete a specific chat log entry by ID."""
-    user_id = g.user["id"]
-    db = get_db()
-
-    try:
-        # Verify log belongs to user
-        cur = db.execute(
-            "SELECT id FROM llm_logs WHERE id = ? AND user_id = ?", (log_id, user_id)
-        )
-        if not cur.fetchone():
-            return jsonify({"error": "Log tidak ditemukan atau bukan milik Anda"}), 404
-
-        # Delete embedding first (if exists)
-        db.execute("DELETE FROM llm_log_embeddings WHERE log_id = ?", (log_id,))
-
-        # Delete log
-        db.execute(
-            "DELETE FROM llm_logs WHERE id = ? AND user_id = ?", (log_id, user_id)
-        )
-
-        db.commit()
-
-        return jsonify(
-            {"status": "ok", "message": "Chat berhasil dihapus", "deleted_id": log_id}
-        ), 200
-
-    except Exception as e:
-        db.rollback()
-        return jsonify({"error": f"Gagal menghapus chat: {str(e)}"}), 500
-
-
-@app.route("/api/memory/logs", methods=["GET", "DELETE"])
-@require_login
-def memory_logs_api():
-    """Get chat history or delete multiple logs by timeframe."""
-    user_id = g.user["id"]
-    db = get_db()
-
-    if request.method == "GET":
-        # Get chat history with optional filters
-        limit = int(request.args.get("limit") or 50)
-        offset = int(request.args.get("offset") or 0)
-        since = request.args.get("since")  # ISO timestamp
-        until = request.args.get("until")  # ISO timestamp
-
-        where = ["user_id = ?"]
-        params = [user_id]
-
-        if since:
-            where.append("created_at >= ?")
-            params.append(since)
-        if until:
-            where.append("created_at <= ?")
-            params.append(until)
-
-        sql = f"""SELECT id, role, content, created_at 
-                  FROM llm_logs 
-                  WHERE {" AND ".join(where)} 
-                  ORDER BY created_at DESC 
-                  LIMIT ? OFFSET ?"""
-        params.extend([limit, offset])
-
-        cur = db.execute(sql, params)
-        logs = [
-            {
-                "id": r["id"],
-                "role": r["role"],
-                "content": r["content"],
-                "created_at": r["created_at"],
-            }
-            for r in cur.fetchall()
-        ]
-
-        total_count = db.execute(
-            f"SELECT COUNT(*) AS c FROM llm_logs WHERE {' AND '.join(where)}",
-            params[: len(where)],
-        ).fetchone()["c"]
-
-        return jsonify(
-            {"logs": logs, "total": total_count, "limit": limit, "offset": offset}
-        ), 200
-
-    elif request.method == "DELETE":
-        # Delete logs by timeframe or IDs
-        data = request.get_json() or {}
-        log_ids = data.get("ids")  # Array of log IDs
-        since = data.get("since")
-        until = data.get("until")
-
-        if log_ids:
-            # Delete specific IDs
-            placeholders = ",".join(["?"] * len(log_ids))
-            params = log_ids + [user_id]
-
-            # Count first
-            count_row = db.execute(
-                f"SELECT COUNT(*) AS c FROM llm_logs WHERE id IN ({placeholders}) AND user_id = ?",
-                params,
-            ).fetchone()
-            count = count_row["c"] if count_row else 0
-
-            # Delete embeddings
-            db.execute(
-                f"DELETE FROM llm_log_embeddings WHERE log_id IN ({placeholders})",
-                log_ids,
-            )
-
-            # Delete logs
-            db.execute(
-                f"DELETE FROM llm_logs WHERE id IN ({placeholders}) AND user_id = ?",
-                params,
-            )
-
-            db.commit()
-            return jsonify(
-                {
-                    "status": "ok",
-                    "message": f"Berhasil menghapus {count} chat",
-                    "deleted_count": count,
-                }
-            ), 200
-
-        elif since or until:
-            # Delete by timeframe
-            where = ["user_id = ?"]
-            params = [user_id]
-
-            if since:
-                where.append("created_at >= ?")
-                params.append(since)
-            if until:
-                where.append("created_at <= ?")
-                params.append(until)
-
-            # Count first
-            count_row = db.execute(
-                f"SELECT COUNT(*) AS c FROM llm_logs WHERE {' AND '.join(where)}",
-                params,
-            ).fetchone()
-            count = count_row["c"] if count_row else 0
-
-            # Get IDs to delete embeddings
-            id_rows = db.execute(
-                f"SELECT id FROM llm_logs WHERE {' AND '.join(where)}", params
-            ).fetchall()
-            log_ids_to_delete = [r["id"] for r in id_rows]
-
-            if log_ids_to_delete:
-                placeholders = ",".join(["?"] * len(log_ids_to_delete))
-                db.execute(
-                    f"DELETE FROM llm_log_embeddings WHERE log_id IN ({placeholders})",
-                    log_ids_to_delete,
-                )
-
-            # Delete logs
-            db.execute(f"DELETE FROM llm_logs WHERE {' AND '.join(where)}", params)
-
-            db.commit()
-            return jsonify(
-                {
-                    "status": "ok",
-                    "message": f"Berhasil menghapus {count} chat dari timeframe yang dipilih",
-                    "deleted_count": count,
-                }
-            ), 200
-
-        else:
-            return jsonify(
-                {"error": "Harus menyertakan 'ids' atau 'since'/'until'"}
-            ), 400
-
-
-@app.route("/api/sessions", methods=["GET", "POST"])
-@require_login
-def sessions_api():
-    """Manage chat sessions."""
-    user_id = g.user["id"]
-    db = get_db()
-
-    if request.method == "GET":
-        # List all sessions for user
-        cur = db.execute(
-            """SELECT s.id, s.title, s.created_at, s.updated_at,
-                      COUNT(l.id) as message_count,
-                      MAX(l.created_at) as last_message_at
-               FROM chat_sessions s
-               LEFT JOIN llm_logs l ON s.id = l.session_id
-               WHERE s.user_id = ?
-               GROUP BY s.id
-               ORDER BY s.updated_at DESC""",
-            (user_id,),
-        )
-        sessions = [
-            {
-                "id": r["id"],
-                "title": r["title"],
-                "created_at": r["created_at"],
-                "updated_at": r["updated_at"],
-                "message_count": r["message_count"] or 0,
-                "last_message_at": r["last_message_at"],
-            }
-            for r in cur.fetchall()
-        ]
-        return jsonify({"sessions": sessions}), 200
-
-    elif request.method == "POST":
-        # Create new session
-        data = request.get_json() or {}
-        title = data.get("title") or "New Chat"
-
-        db.execute(
-            "INSERT INTO chat_sessions (user_id, title) VALUES (?, ?)",
-            (user_id, title),
-        )
-        db.commit()
-
-        cur = db.execute(
-            "SELECT id, title, created_at, updated_at FROM chat_sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
-            (user_id,),
-        )
-        session = cur.fetchone()
-
-        return jsonify(
-            {
-                "status": "ok",
-                "message": "Session created",
-                "session": {
-                    "id": session["id"],
-                    "title": session["title"],
-                    "created_at": session["created_at"],
-                    "updated_at": session["updated_at"],
-                },
-            }
-        ), 201
-
-
-@app.route("/api/sessions/<int:session_id>", methods=["GET", "PUT", "DELETE"])
-@require_login
-def session_detail_api(session_id):
-    """Get, update, or delete a specific session."""
-    user_id = g.user["id"]
-    db = get_db()
-
-    # Verify session belongs to user
-    cur = db.execute(
-        "SELECT id, title, created_at, updated_at FROM chat_sessions WHERE id = ? AND user_id = ?",
-        (session_id, user_id),
-    )
-    session = cur.fetchone()
-    if not session:
-        return jsonify({"error": "Session tidak ditemukan"}), 404
-
-    if request.method == "GET":
-        # Get session with messages
-        logs_cur = db.execute(
-            "SELECT id, role, content, created_at FROM llm_logs WHERE session_id = ? ORDER BY created_at ASC",
-            (session_id,),
-        )
-        messages = [
-            {
-                "id": r["id"],
-                "role": r["role"],
-                "content": r["content"],
-                "created_at": r["created_at"],
-            }
-            for r in logs_cur.fetchall()
-        ]
-
-        return jsonify(
-            {
-                "session": {
-                    "id": session["id"],
-                    "title": session["title"],
-                    "created_at": session["created_at"],
-                    "updated_at": session["updated_at"],
-                    "messages": messages,
-                }
-            }
-        ), 200
-
-    elif request.method == "PUT":
-        # Update session title
-        data = request.get_json() or {}
-        title = data.get("title")
-
-        if not title or not title.strip():
-            return jsonify({"error": "Title tidak boleh kosong"}), 400
-
-        db.execute(
-            "UPDATE chat_sessions SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?",
-            (title, session_id, user_id),
-        )
-        db.commit()
-
-        return jsonify(
-            {"status": "ok", "message": "Session title updated", "title": title}
-        ), 200
-
-    elif request.method == "DELETE":
-        # Delete session (CASCADE will automatically delete llm_logs and llm_log_embeddings)
-        try:
-            print(f"\n{'=' * 60}")
-            print("[DEBUG] DELETE SESSION ENDPOINT CALLED")
-            print(f"[DEBUG] Session ID: {session_id}")
-            print(f"[DEBUG] User ID: {user_id}")
-
-            # Count logs before deletion for confirmation
-            count_row = db.execute(
-                "SELECT COUNT(*) AS c FROM llm_logs WHERE session_id = ?",
-                (session_id,),
-            ).fetchone()
-            logs_count = count_row["c"] if count_row else 0
-            print(f"[DEBUG] Logs to delete: {logs_count}")
-
-            # Count embeddings before
-            emb_row = db.execute(
-                """SELECT COUNT(*) AS c FROM llm_log_embeddings 
-                   WHERE log_id IN (SELECT id FROM llm_logs WHERE session_id = ?)""",
-                (session_id,),
-            ).fetchone()
-            emb_count = emb_row["c"] if emb_row else 0
-            print(f"[DEBUG] Embeddings to delete: {emb_count}")
-
-            # Delete the session (CASCADE handles the rest)
-            print("[DEBUG] Executing DELETE FROM chat_sessions...")
-            cursor = db.execute(
-                "DELETE FROM chat_sessions WHERE id = ? AND user_id = ?",
-                (session_id, user_id),
-            )
-            # For PostgreSQL, use cursor.rowcount instead of changes()
-            affected = cursor.rowcount if hasattr(cursor, "rowcount") else "unknown"
-            print(f"[DEBUG] Rows affected: {affected}")
-
-            db.commit()
-            print("[DEBUG] ✅ Commit successful")
-
-            # Verify deletion
-            verify = db.execute(
-                "SELECT COUNT(*) AS c FROM llm_logs WHERE session_id = ?",
-                (session_id,),
-            ).fetchone()
-            remaining = verify["c"] if verify else 0
-            print(f"[DEBUG] Logs remaining: {remaining}")
-            print(f"{'=' * 60}\n")
-
-            return jsonify(
-                {
-                    "status": "ok",
-                    "message": "Session berhasil dihapus",
-                    "deleted_logs": logs_count,
-                    "deleted_embeddings": emb_count,
-                }
-            ), 200
-
-        except Exception as e:
-            print(f"[DEBUG] ❌ ERROR: {e}")
-            print(f"{'=' * 60}\n")
-            db.rollback()
-            return jsonify({"error": f"Gagal menghapus session: {str(e)}"}), 500
-
-
-@app.route("/api/sessions/sync", methods=["GET"])
-@require_login
-def sync_sessions_api():
-    """Auto-cleanup and sync sessions with database.
-    Removes empty sessions and orphaned logs.
-    """
-    user_id = g.user["id"]
-    db = get_db()
-
-    deleted_sessions = []
-    orphaned_logs = 0
-
-    # 1. Find and delete empty sessions (no messages)
-    empty_cur = db.execute(
-        """
-        SELECT cs.id, cs.title
-        FROM chat_sessions cs
-        LEFT JOIN llm_logs l ON cs.id = l.session_id
-        WHERE cs.user_id = ? AND l.id IS NULL
-    """,
-        (user_id,),
-    )
-    empty_sessions = empty_cur.fetchall()
-
-    for session in empty_sessions:
-        db.execute("DELETE FROM chat_sessions WHERE id = ?", (session["id"],))
-        deleted_sessions.append(
-            {"id": session["id"], "title": session["title"], "reason": "empty"}
-        )
-
-    # 2. Handle orphaned logs (assign to "Old Messages" session)
-    orphan_cur = db.execute(
-        "SELECT COUNT(*) AS c FROM llm_logs WHERE user_id = ? AND session_id IS NULL",
-        (user_id,),
-    )
-    orphaned_logs = orphan_cur.fetchone()["c"]
-
-    if orphaned_logs > 0:
-        # Create or get "Old Messages" session
-        old_session_cur = db.execute(
-            "SELECT id FROM chat_sessions WHERE user_id = ? AND title = ?",
-            (user_id, "Old Messages"),
-        )
-        old_session = old_session_cur.fetchone()
-
-        if old_session:
-            old_session_id = old_session["id"]
-        else:
-            db.execute(
-                """
-                INSERT INTO chat_sessions (user_id, title, created_at, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            """,
-                (user_id, "Old Messages"),
-            )
-            old_session_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-        # Assign orphaned logs to this session
-        db.execute(
-            "UPDATE llm_logs SET session_id = ? WHERE user_id = ? AND session_id IS NULL",
-            (old_session_id, user_id),
-        )
-
-    db.commit()
-
-    return jsonify(
-        {
-            "status": "ok",
-            "deleted_sessions": deleted_sessions,
-            "orphaned_logs_migrated": orphaned_logs,
-        }
-    ), 200
-
-
-@app.route("/api/sessions/ids", methods=["GET"])
-@require_login
-def list_session_ids_api():
-    """Get list of valid session IDs for current user.
-    Used by frontend to verify which sessions exist in DB.
-    """
-    user_id = g.user["id"]
-    db = get_db()
-
-    cur = db.execute(
-        "SELECT id, title, created_at, updated_at FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC",
-        (user_id,),
-    )
-    sessions = cur.fetchall()
-
-    return jsonify(
-        {
-            "session_ids": [s["id"] for s in sessions],
-            "sessions": [
-                {
-                    "id": s["id"],
-                    "title": s["title"],
-                    "created_at": s["created_at"],
-                    "updated_at": s["updated_at"],
-                }
-                for s in sessions
-            ],
-        }
-    ), 200
-
-
-@app.route("/api/memory/search", methods=["GET"])
-@require_login
-def memory_search_api():
-    user_id = g.user["id"]
-    query = (request.args.get("q") or "").strip()
-    top_k = int(request.args.get("top_k") or 5)
-    if not query:
-        return jsonify({"error": "q parameter kosong"}), 400
-
-    # Ensure embeddings exist for recent logs
-    stats = ensure_log_embeddings(user_id, batch_size=200)
-    results = semantic_search(user_id, query, top_k=top_k)
-    return jsonify({"results": results, "embedding_update": stats}), 200
-
-
-@app.route("/api/memory/config", methods=["GET", "PUT"])
-@require_login
-def memory_config_api():
-    user_id = g.user["id"]
-    db = get_db()
-    if request.method == "GET":
-        cfg = get_effective_config(user_id)
-        cur = db.execute(
-            "SELECT embedding_provider FROM llm_memory_config WHERE user_id = ?",
-            (user_id,),
-        )
-        row = cur.fetchone()
-        embedding_provider = row["embedding_provider"] if row else "openai"
-        cfg["embedding_provider"] = embedding_provider
-        return jsonify(cfg), 200
-
-    # PUT
-    data = request.get_json() or {}
-    summary_threshold = data.get("summary_threshold")
-    max_log_context = data.get("max_log_context")
-    max_source = data.get("max_source")
-    embedding_provider = data.get("embedding_provider")
-
-    # Basic validation
-    def _pos_int(val, name):
-        if val is None:
-            return None
-        try:
-            iv = int(val)
-            if iv <= 0:
-                raise ValueError
-            return iv
-        except Exception:
-            raise ValueError(f"{name} harus integer > 0")
-
-    try:
-        st = _pos_int(summary_threshold, "summary_threshold")
-        mc = _pos_int(max_log_context, "max_log_context")
-        ms = _pos_int(max_source, "max_source")
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-
-    if embedding_provider and embedding_provider not in ("openai", "local"):
-        return jsonify({"error": "embedding_provider harus 'openai' atau 'local'"}), 400
-
-    # Upsert logic
-    cur = db.execute(
-        "SELECT user_id FROM llm_memory_config WHERE user_id = ?", (user_id,)
-    )
-    exists = cur.fetchone() is not None
-    if exists:
-        updates = []
-        params = []
-        if st is not None:
-            updates.append("summary_threshold = ?")
-            params.append(st)
-        if mc is not None:
-            updates.append("max_log_context = ?")
-            params.append(mc)
-        if ms is not None:
-            updates.append("max_source = ?")
-            params.append(ms)
-        if embedding_provider:
-            updates.append("embedding_provider = ?")
-            params.append(embedding_provider)
-        if not updates:
-            return jsonify({"status": "ok", "message": "Tidak ada perubahan"}), 200
-        params.append(user_id)
-        sql = (
-            "UPDATE llm_memory_config SET "
-            + ", ".join(updates)
-            + ", updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
-        )
-        db.execute(sql, params)
-    else:
-        db.execute(
-            "INSERT INTO llm_memory_config (user_id, summary_threshold, max_log_context, max_source, embedding_provider) VALUES (?, ?, ?, ?, ?)",
-            (
-                user_id,
-                st or SUMMARY_THRESHOLD,
-                mc or MAX_LOG_CONTEXT,
-                ms or MAX_LOG_SOURCE,
-                embedding_provider or "openai",
-            ),
-        )
-    db.commit()
-    new_cfg = get_effective_config(user_id)
-    cur = db.execute(
-        "SELECT embedding_provider FROM llm_memory_config WHERE user_id = ?",
-        (user_id,),
-    )
-    row = cur.fetchone()
-    new_cfg["embedding_provider"] = row["embedding_provider"] if row else "openai"
-    return jsonify({"status": "ok", "config": new_cfg}), 200
 
 
 # === MAIN ===

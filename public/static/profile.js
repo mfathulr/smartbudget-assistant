@@ -34,7 +34,23 @@ function updateProfileUI(user) {
 
     const roleDisplay = document.getElementById('user-role-display');
     if (user.role) {
-        roleDisplay.textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1); // Membuat huruf pertama kapital, cth: "Admin"
+        let roleText = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+        let roleIcon = '👤';
+        let roleClass = '';
+        
+        if (user.role === 'admin') {
+            roleIcon = '🛡️';
+            roleClass = 'role-admin';
+        } else if (user.role === 'premium') {
+            roleIcon = '👑';
+            roleClass = 'role-premium';
+            roleText = 'Premium';
+        } else {
+            roleClass = 'role-user';
+        }
+        
+        roleDisplay.textContent = `${roleIcon} ${roleText}`;
+        roleDisplay.className = `profile-role ${roleClass}`;
         roleDisplay.style.display = 'inline-block';
     }
 

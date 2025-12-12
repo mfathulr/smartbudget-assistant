@@ -127,6 +127,26 @@
             backdrop-filter: blur(10px);
         }
         
+        .profile-role.role-admin {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.9), rgba(245, 158, 11, 0.9));
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+        }
+        
+        .profile-role.role-premium {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.95), rgba(245, 158, 11, 0.95));
+            box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+            animation: premiumGlow 2s ease-in-out infinite;
+        }
+        
+        @keyframes premiumGlow {
+            0%, 100% { box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4); }
+            50% { box-shadow: 0 6px 20px rgba(251, 191, 36, 0.6); }
+        }
+        
+        .profile-role.role-user {
+            background: rgba(255,255,255,0.2);
+        }
+        
         /* Stats Cards */
         .stats-grid {
             display: grid;

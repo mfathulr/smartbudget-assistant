@@ -29,7 +29,7 @@ def get_current_user():
         """
         SELECT users.id, users.name, users.email, users.role, sessions.expires_at
         FROM sessions JOIN users ON sessions.user_id = users.id
-        WHERE sessions.session_token = ?
+        WHERE sessions.session_token = %s
         """,
         (token,),
     )
@@ -56,12 +56,12 @@ def get_current_user():
             wib_now = datetime.now(timezone(timedelta(hours=7))).replace(tzinfo=None)
             if exp_dt < wib_now:
                 # Session expired -> remove it
-                db.execute("DELETE FROM sessions WHERE session_token = ?", (token,))
+                db.execute("DELETE FROM sessions WHERE session_token = %s", (token,))
                 db.commit()
                 return None
         except Exception:
             # If parsing fails treat as invalid / expired
-            db.execute("DELETE FROM sessions WHERE session_token = ?", (token,))
+            db.execute("DELETE FROM sessions WHERE session_token = %s", (token,))
             db.commit()
             return None
 

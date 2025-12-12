@@ -8,21 +8,25 @@ load_dotenv()
 
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "backend" / "finance.db"
 SCHEMA_PATH = BASE_DIR / "backend" / "schema.sql"
 
 # API Keys
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
-# Database configuration
-# Use DATABASE_URL for PostgreSQL (Neon), fallback to SQLite for local dev
+# Database configuration - PostgreSQL (Neon) ONLY
 DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Neon uses postgres://, but SQLAlchemy needs postgresql://
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable is required! "
+        "Please set DATABASE_URL in your .env file with your Neon PostgreSQL connection string."
+    )
+
+# Neon uses postgres://, but psycopg2 needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-DB_TYPE = "postgresql" if DATABASE_URL else "sqlite"
+DB_TYPE = "postgresql"  # Always PostgreSQL
 
 # Email configuration (SMTP)
 SMTP_HOST = os.environ.get("SMTP_HOST")  # e.g., smtp.gmail.com

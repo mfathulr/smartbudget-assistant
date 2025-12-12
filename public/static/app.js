@@ -43,6 +43,27 @@ function parseAmount(valueStr) {
   return parseFloat(String(valueStr).replace(/,/g, ""));
 }
 
+// Utility: debounce function to reduce function call frequency
+function debounce(func, delay) {
+  let timeoutId;
+  return function(...args) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(this, args), delay);
+  };
+}
+
+// Utility: throttle function to limit function call frequency
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
 // Utility: show notification toast
 function showNotification(message, type = 'info') {
   const notification = document.createElement('div');
@@ -270,6 +291,112 @@ document.addEventListener('DOMContentLoaded', async () => {
   // If on profile page, load profile data with user info
   if (user && typeof loadProfileData === 'function') {
     loadProfileData(user);
+  }
+
+  // Initialize chat model dropdown to reflect saved provider & models (global scope)
+  window.chatProvider = 'google';
+  window.chatModel = 'gemini-2.0-flash-lite';
+  window.chatModelDefinitions = {
+    google: [
+      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', premium: false },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', premium: false },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', premium: true },
+    ],
+    openai: [
+      { id: 'gpt-4o-mini', label: 'GPT-4o Mini', premium: false },
+      { id: 'gpt-5-nano', label: 'GPT-5 Nano', premium: true },
+      { id: 'gpt-5-mini', label: 'GPT-5 Mini', premium: true },
+      { id: 'gpt-5', label: 'GPT-5', premium: true },
+    ],
+  };
+
+  const defaultChatModelFor = (provider) => {
+    const list = window.chatModelDefinitions[provider] || [];
+    return list.length ? list[0].id : null;
+  };
+
+  const populateModelSelect = (provider, currentModel, userRole = 'user') => {
+    const modelSelect = document.getElementById('model-provider');
+    if (!modelSelect) {
+      console.warn('[ADVISOR] Model dropdown not found in DOM');
+      return false;
+    }
+    console.log('[ADVISOR] Populating dropdown for provider:', provider, 'with', window.chatModelDefinitions[provider]?.length, 'models', 'User role:', userRole);
+    modelSelect.innerHTML = '';
+    (window.chatModelDefinitions[provider] || []).forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      
+      // Add premium badge and disable for standard users
+      if (m.premium && userRole === 'user') {
+        opt.textContent = `${m.label} 👑 (Premium)`;
+        opt.disabled = true;
+        opt.style.color = '#999';
+      } else if (m.premium) {
+        opt.textContent = `${m.label} 👑`;
+      } else {
+        opt.textContent = m.label;
+      }
+      
+      modelSelect.appendChild(opt);
+    });
+    
+    // Set current model, but check if it's premium and user is standard
+    let selectedModel = currentModel || defaultChatModelFor(provider);
+    const selectedModelDef = (window.chatModelDefinitions[provider] || []).find(m => m.id === selectedModel);
+    
+    // If selected model is premium and user is standard, switch to default non-premium model
+    if (selectedModelDef && selectedModelDef.premium && userRole === 'user') {
+      console.warn('[ADVISOR] Selected model is premium but user is standard, switching to default');
+      selectedModel = (window.chatModelDefinitions[provider] || []).find(m => !m.premium)?.id || defaultChatModelFor(provider);
+    }
+    
+    modelSelect.value = selectedModel;
+    console.log('[ADVISOR] Dropdown populated, selected:', modelSelect.value, 'total options:', modelSelect.options.length);
+    return true;
+  };
+
+  // Make it globally accessible
+  window.populateModelSelect = populateModelSelect;
+  window.defaultChatModelFor = defaultChatModelFor;
+
+  // Store user settings globally for later initialization
+  if (user) {
+    let savedProvider = user.ai_provider || 'google';
+    let savedModel = user.ai_model || defaultChatModelFor(savedProvider);
+
+    // Use saved settings from database (backend validates role restrictions)
+    window.chatProvider = savedProvider;
+    window.chatModel = savedModel || defaultChatModelFor(window.chatProvider);
+    window.userRole = user.role || 'user'; // Store user role globally
+    localStorage.setItem('model_provider', window.chatProvider);
+    localStorage.setItem('model', window.chatModel);
+    console.log('[ADVISOR INIT] Provider:', window.chatProvider, 'Model:', window.chatModel, 'User Role:', window.userRole);
+
+    // Try to populate dropdown now (if on dashboard)
+    const modelSelect = document.getElementById('model-provider');
+    if (modelSelect) {
+      // Show info based on role
+      if (user.role === 'user' && savedProvider === 'openai') {
+        modelSelect.title = '⚠️ OpenAI is Premium only. Your requests will be blocked by server.';
+      } else if (user.role === 'user') {
+        modelSelect.title = 'Standard users: Premium models (👑) require upgrade. Note: Free tier models may have quota limits.';
+      } else {
+        modelSelect.title = 'Choose your preferred AI model. Note: Free tier models may have quota limits.';
+      }
+      
+      populateModelSelect(window.chatProvider, window.chatModel, window.userRole);
+
+      // Listen for model change (provider is fixed by settings)
+      modelSelect.addEventListener('change', () => {
+        window.chatModel = modelSelect.value;
+        localStorage.setItem('model', window.chatModel);
+        console.log('[ADVISOR] Model changed to:', window.chatModel);
+      });
+    } else {
+      // Dropdown will be populated when tab is activated
+      console.log('[ADVISOR] Dropdown not yet in DOM, will populate on tab activation');
+    }
   }
 
   // Hide old admin link if exists
@@ -809,6 +936,15 @@ function switchTab(tabName) {
   // Auto-scroll chat to bottom when switching to advisor tab
   if (tabName === 'advisor') {
     ensureChatScrolledToBottom();
+    
+    // Re-populate model dropdown if it exists and is empty
+    const modelSelect = document.getElementById('model-provider');
+    if (modelSelect && window.chatProvider) {
+      if (modelSelect.options.length === 0) {
+        console.log('[ADVISOR] Re-populating dropdown on tab switch');
+        window.populateModelSelect(window.chatProvider, window.chatModel, window.userRole || 'user');
+      }
+    }
   }
 }
 
@@ -1372,7 +1508,7 @@ function renderAccountBalanceChart(accounts) {
 
 // --- CHAT FUNCTION ---
 
-function appendChat(role, text, imageData = null) {
+function appendChat(role, text, imageData = null, isLastUserMsg = false) {
   const box = document.getElementById("chat-box");
   if (!box) return;
   const div = document.createElement("div");
@@ -1383,9 +1519,19 @@ function appendChat(role, text, imageData = null) {
     if (imageData) {
       imageHtml = `<div style="margin-bottom: 8px;"><img src="${imageData}" style="max-width: 300px; max-height: 300px; border-radius: 8px; border: 2px solid var(--border-color);" /></div>`;
     }
+    const editBtn = isLastUserMsg ? `<button class="msg-user-edit-btn" title="Edit prompt"><i class="fas fa-pen"></i></button>` : '';
+    const copyBtn = isLastUserMsg ? `<button class="msg-user-copy-btn" title="Copy prompt"><i class="fas fa-copy"></i></button>` : '';
     div.innerHTML = `
-      ${imageHtml}
-      <div class="message-content">${escapeHtml(text)}</div>
+      <div class="msg-user-wrapper">
+        <div class="msg-user-actions">
+          ${copyBtn}
+          ${editBtn}
+        </div>
+        <div class="msg-user-bubble">
+          ${imageHtml}
+          <div class="message-content">${escapeHtml(text)}</div>
+        </div>
+      </div>
       <div class="message-avatar">
         <i class="fas fa-user"></i>
       </div>
@@ -1397,14 +1543,14 @@ function appendChat(role, text, imageData = null) {
       <div class="message-avatar">
         <i class="fas fa-brain"></i>
       </div>
-      <div>
+      <div class="message-body">
         <div class="message-content" id="${messageId}">${marked.parse(text)}</div>
         <div class="message-actions">
-          <button class="message-action-btn" onclick="copyMessage('${messageId}')" title="Copy">
-            <i class="fas fa-copy"></i> Copy
+          <button class="message-action-btn" onclick="copyMessage('${messageId}')" title="Copy response">
+            <i class="fas fa-copy"></i>
           </button>
-          <button class="message-action-btn" onclick="regenerateResponse()" title="Regenerate">
-            <i class="fas fa-redo"></i> Regenerate
+          <button class="message-action-btn" onclick="regenerateResponse()" title="Redo">
+            <i class="fas fa-redo"></i>
           </button>
         </div>
       </div>
@@ -1429,6 +1575,16 @@ function copyMessage(messageId) {
   }).catch(err => {
     console.error('Copy failed:', err);
   });
+}
+
+function getLastUserMessage() {
+  const activeSession = getActiveSession();
+  if (!activeSession || !activeSession.messages) return null;
+  for (let i = activeSession.messages.length - 1; i >= 0; i--) {
+    const m = activeSession.messages[i];
+    if (m && m.role === 'user') return m;
+  }
+  return null;
 }
 
 function regenerateResponse() {
@@ -1456,6 +1612,71 @@ function showTempNotification(message) {
     msgEl.textContent = '';
     msgEl.style.color = '';
   }, 2000);
+}
+
+async function handleEditLastUserClick() {
+  const lastUser = getLastUserMessage();
+  if (!lastUser) {
+    alert('Belum ada pesan user untuk diedit.');
+    return;
+  }
+  const edited = prompt('Edit pesan terakhir:', lastUser.content || '');
+  if (edited === null) return; // cancelled
+  const trimmed = edited.trim();
+  if (!trimmed) {
+    alert('Pesan tidak boleh kosong.');
+    return;
+  }
+  if (trimmed === lastUser.content) {
+    showTempNotification('Tidak ada perubahan.');
+    return;
+  }
+
+  const activeSession = getActiveSession();
+  const sessionId = activeSession ? activeSession.sessionId : null;
+  try {
+    const updateRes = await apiFetch('/api/memory/logs/last-user', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: trimmed, session_id: sessionId, delete_following: true })
+    });
+    const updateData = await updateRes.json();
+    if (!updateRes.ok) {
+      throw new Error(updateData.error || 'Gagal menyimpan perubahan');
+    }
+
+    const modelSelectEl = document.getElementById('model-provider');
+    const modelProvider = window.chatProvider || (localStorage.getItem('model_provider') || 'google');
+    const modelId = modelSelectEl ? modelSelectEl.value : (localStorage.getItem('model') || null);
+    const typingIndicator = document.getElementById("typing-indicator");
+    const currentLang = localStorage.getItem('language') || 'id';
+    const typingText = translations[currentLang].typingIndicator;
+    typingIndicator.textContent = typingText;
+    typingIndicator.style.display = 'flex';
+
+    const regenerateRes = await apiFetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: trimmed,
+        model_provider: modelProvider,
+        model: modelId,
+        lang: currentLang,
+        session_id: sessionId || updateData.session_id,
+        reuse_last_user: true
+      })
+    });
+    const regenData = await regenerateRes.json();
+    if (!regenerateRes.ok) {
+      throw new Error(regenData.error || 'Gagal generate ulang');
+    }
+
+    typingIndicator.style.display = 'none';
+    await loadChatData();
+    showTempNotification('Pesan diedit dan di-generate ulang');
+  } catch (err) {
+    alert(err.message || 'Gagal edit/generate ulang');
+  }
 }
 
 function setLanguage(lang) {
@@ -1523,33 +1744,58 @@ function setLanguage(lang) {
 // Expose setLanguage globally for use in all pages
 window.setLanguage = setLanguage;
 
-/* --- CHAT SESSION MANAGEMENT --- */
+/* --- CHAT SESSION MANAGEMENT (server truth, no localStorage cache) --- */
 let chatData = { sessions: [], activeSessionId: null };
 
-function generateUUID() {
-  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-  );
-}
-
+// Persist only in memory to avoid stale local copies when DB is cleared
 function saveChatData() {
-  localStorage.setItem('chatData', JSON.stringify(chatData));
+  /* no-op: source of truth is server */
 }
 
-function loadChatData() {
-  const data = localStorage.getItem('chatData');
-  if (data) {
-    chatData = JSON.parse(data);
-    // Ensure all sessions have messages array
-    if (chatData.sessions) {
-      chatData.sessions.forEach(s => {
-        if (!s.messages) s.messages = [];
-      });
-    }
-    if (!chatData.activeSessionId && chatData.sessions.length > 0) {
-      chatData.activeSessionId = chatData.sessions[0].id;
-    }
+async function loadChatData() {
+  try {
+    // Load only last 50 messages initially for faster load
+    const res = await apiFetch('/api/memory/logs?limit=50&offset=0');
+    const data = await res.json();
+    const logs = (data && data.logs) ? data.logs : [];
+    const sessionId = logs.length && logs[0].session_id ? logs[0].session_id : null;
+    const sessionKey = sessionId ? `session-${sessionId}` : 'server-session';
+    const messages = logs.slice().reverse().map(l => ({
+      id: l.id,
+      sessionId: l.session_id,
+      role: l.role,
+      content: l.content
+    }));
+    
+    // Store total count for pagination
+    const totalCount = data.total || 0;
+    
+    chatData.sessions = [
+      {
+        id: sessionKey,
+        sessionId,
+        title: 'Percakapan',
+        messages,
+        totalMessages: totalCount,
+        loadedCount: logs.length
+      }
+    ];
+    chatData.activeSessionId = sessionKey;
+  } catch (err) {
+    console.error('Failed to load chat logs from server:', err);
+    chatData.sessions = [
+      {
+        id: 'server-session',
+        sessionId: null,
+        title: 'Percakapan',
+        messages: [],
+        totalMessages: 0,
+        loadedCount: 0
+      }
+    ];
+    chatData.activeSessionId = 'server-session';
   }
+
   renderChatSessions();
   loadActiveSession();
 }
@@ -1562,6 +1808,52 @@ function ensureChatScrolledToBottom() {
       box.scrollTop = box.scrollHeight;
     }, 50);
   }
+}
+
+// Load more messages when user scrolls to top
+async function loadMoreMessages() {
+  const activeSession = chatData.sessions.find(s => s.id === chatData.activeSessionId);
+  if (!activeSession) return;
+  
+  const currentLoadedCount = activeSession.loadedCount || activeSession.messages.length;
+  const totalMessages = activeSession.totalMessages || 0;
+  
+  // Only load if there are more messages
+  if (currentLoadedCount >= totalMessages) return;
+  
+  try {
+    const nextOffset = currentLoadedCount;
+    const res = await apiFetch(`/api/memory/logs?limit=50&offset=${nextOffset}`);
+    const data = await res.json();
+    const logs = (data && data.logs) ? data.logs : [];
+    
+    // Reverse logs and add to beginning of messages array
+    const newMessages = logs.slice().reverse().map(l => ({
+      id: l.id,
+      sessionId: l.session_id,
+      role: l.role,
+      content: l.content
+    }));
+    
+    // Prepend new messages (maintain chronological order)
+    activeSession.messages = [...newMessages, ...activeSession.messages];
+    activeSession.loadedCount = currentLoadedCount + logs.length;
+    
+    // Refresh display without scrolling to bottom
+    const box = document.getElementById("chat-box");
+    const oldScrollHeight = box.scrollHeight;
+    loadActiveSession();
+    
+    // Maintain scroll position (offset new height)
+    const newScrollHeight = box.scrollHeight;
+    box.scrollTop = newScrollHeight - oldScrollHeight;
+  } catch (err) {
+    console.error('Failed to load more messages:', err);
+  }
+}
+
+function getActiveSession() {
+  return chatData.sessions.find(s => s.id === chatData.activeSessionId);
 }
 
 function loadActiveSession() {
@@ -1581,9 +1873,49 @@ function loadActiveSession() {
   if (activeSession && activeSession.messages && activeSession.messages.length > 0) {
     if (welcomeScreen) welcomeScreen.style.display = 'none';
     box.style.display = 'flex';
-    activeSession.messages.forEach(msg => {
-      appendChat(msg.role, msg.content, msg.image); // Render message with image if available
+    
+    // Find index of last user message
+    let lastUserMsgIndex = -1;
+    for (let i = activeSession.messages.length - 1; i >= 0; i--) {
+      if (activeSession.messages[i].role === 'user') {
+        lastUserMsgIndex = i;
+        break;
+      }
+    }
+    
+    activeSession.messages.forEach((msg, idx) => {
+      const isLastUserMsg = (msg.role === 'user' && idx === lastUserMsgIndex);
+      appendChat(msg.role, msg.content, msg.image, isLastUserMsg);
     });
+    
+    // Attach event listener to last user message wrapper for edit button
+    if (lastUserMsgIndex >= 0) {
+      setTimeout(() => {
+        const userMessages = box.querySelectorAll('.msg-user');
+        if (userMessages.length > 0) {
+          const lastUserMsg = userMessages[userMessages.length - 1];
+          const editBtn = lastUserMsg.querySelector('.msg-user-edit-btn');
+          const copyBtn = lastUserMsg.querySelector('.msg-user-copy-btn');
+          if (editBtn) {
+            editBtn.addEventListener('click', handleEditLastUserClick);
+          }
+          if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+              const msgContent = lastUserMsg.querySelector('.message-content');
+              if (msgContent) {
+                const text = msgContent.innerText;
+                navigator.clipboard.writeText(text).then(() => {
+                  showMessage('chat-msg', 'Prompt copied to clipboard!', 'success');
+                }).catch(err => {
+                  console.error('Failed to copy:', err);
+                });
+              }
+            });
+          }
+        }
+      }, 50);
+    }
+    
     // Auto-scroll to bottom
     setTimeout(() => {
       box.scrollTop = box.scrollHeight;
@@ -1663,28 +1995,30 @@ function renderChatSessions() {
   });
 }
 
-function createNewSession() {
-  const newId = generateUUID();
-  const newSession = {
-    id: newId,
-    title: `Obrolan ${new Date().toLocaleTimeString()}`,
-    messages: []
-  };
-  chatData.sessions.unshift(newSession);
-  chatData.activeSessionId = newId;
+async function createNewSession() {
+  try {
+    await apiFetch('/api/memory/clear', { method: 'DELETE' });
+  } catch (err) {
+    console.error('Failed to clear server chat logs:', err);
+  }
+
+  chatData.sessions = [
+    {
+      id: 'server-session',
+      sessionId: null,
+      title: `Obrolan ${new Date().toLocaleTimeString()}`,
+      messages: []
+    }
+  ];
+  chatData.activeSessionId = 'server-session';
   saveChatData();
   renderChatSessions();
   loadActiveSession();
 }
 
 function deleteSession(sessionId) {
-  chatData.sessions = chatData.sessions.filter(s => s.id !== sessionId);
-  if (chatData.activeSessionId === sessionId) {
-    chatData.activeSessionId = chatData.sessions.length > 0 ? chatData.sessions[0].id : null;
-  }
-  saveChatData();
-  renderChatSessions();
-  loadActiveSession();
+  // Single server-backed session: deleting means clear and start fresh
+  createNewSession();
 }
 
 function handleRenameSession(sessionId, newTitle) {
@@ -1704,7 +2038,7 @@ function addMessageToActiveSession(role, content, imageData = null) {
     if (!activeSession.messages) {
       activeSession.messages = [];
     }
-    const message = { role, content };
+    const message = { role, content, sessionId: activeSession.sessionId };
     if (imageData) {
       message.image = imageData;
     }
@@ -1903,6 +2237,19 @@ async function init() {
     });
   }
   loadChatData();
+  
+  // Add scroll listener for lazy loading more messages (throttled)
+  const chatBox = document.getElementById('chat-box');
+  if (chatBox) {
+    const throttledLoadMore = throttle(() => {
+      // Trigger load more when scrolled near top (100px)
+      if (chatBox.scrollTop < 100) {
+        loadMoreMessages();
+      }
+    }, 1000); // Throttle to max once per second
+    
+    chatBox.addEventListener('scroll', throttledLoadMore);
+  }
   
   // Ensure chat is scrolled to bottom on initial page load
   setTimeout(() => {
@@ -2272,7 +2619,7 @@ async function init() {
       }
 
       addMessageToActiveSession('user', text, imageData);
-      loadActiveSession(); // Reload to show the new user message
+      loadActiveSession(); // Reload to show the new user message and attach edit button
 
       chatInput.value = "";
       chatInput.style.height = 'auto';
@@ -2292,58 +2639,151 @@ async function init() {
       typingIndicator.style.display = 'flex';
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      const modelProvider = document.getElementById('model-provider').value;
-
-      // --- Logika Berbeda Berdasarkan Provider ---
+      const modelSelectEl = document.getElementById('model-provider');
+      const modelProvider = window.chatProvider || (localStorage.getItem('model_provider') || 'google');
+      const modelId = modelSelectEl ? modelSelectEl.value : (localStorage.getItem('model') || null);
 
       // --- Unified SSE Streaming for both providers ---
+      // Declare streamDiv outside try-catch to be accessible in error handler
+      let streamDiv = null;
+      let streamContent = null;
+      let streamActions = null;
+      let streamMessageId = null;
+      let fullResponseText = '';
+      
+      // Function to ensure stream container exists
+      const ensureStreamContainer = () => {
+        if (streamDiv) return;
+        streamMessageId = `stream-${Date.now()}`;
+        streamDiv = document.createElement("div");
+        streamDiv.className = "msg-bot";
+        streamDiv.innerHTML = `
+          <div class="message-avatar"><i class="fas fa-brain"></i></div>
+          <div class="message-body">
+            <div class="message-content streaming-content" id="${streamMessageId}"></div>
+            <div class="message-actions"></div>
+          </div>
+        `;
+        chatBox.appendChild(streamDiv);
+        streamContent = streamDiv.querySelector('.streaming-content');
+        streamActions = streamDiv.querySelector('.message-actions');
+      };
+      
       try {
         let response;
-        if (imageData) {
-          // Use FormData for image upload
-          const formData = new FormData();
-          formData.append('message', text || 'Analyze this image');
-          formData.append('image', imageFile);
-          formData.append('model_provider', modelProvider);
-          formData.append('lang', localStorage.getItem('language') || 'id');
-          
-          response = await apiFetch('/api/chat', {
-            method: 'POST',
-            body: formData
-          });
-        } else {
-          // Regular JSON request
-          response = await apiFetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, model_provider: modelProvider, lang: localStorage.getItem('language') || 'id' })
-          });
+        
+        // Create abort controller for timeout (60 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        
+        try {
+          if (imageData) {
+            // Use FormData for image upload
+            const formData = new FormData();
+            formData.append('message', text || 'Analyze this image');
+            formData.append('image', imageFile);
+            formData.append('model_provider', modelProvider);
+            formData.append('model', modelId || '');
+            formData.append('lang', localStorage.getItem('language') || 'id');
+            console.log('[ADVISOR] Image upload - Provider:', modelProvider, 'Model:', modelId);
+            
+            response = await apiFetch('/api/chat', {
+              method: 'POST',
+              body: formData,
+              signal: controller.signal
+            });
+          } else {
+            // Regular JSON request
+            console.log('[ADVISOR] Text chat - Provider:', modelProvider, 'Model:', modelId);
+            response = await apiFetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: text, model_provider: modelProvider, model: modelId, lang: localStorage.getItem('language') || 'id' }),
+              signal: controller.signal
+            });
+          }
+        } finally {
+          clearTimeout(timeoutId);
         }
+
         if (!response.ok) {
           // Try to extract JSON error
           let errMsg = `HTTP error! status: ${response.status}`;
+          let errorCode = null;
+          let suggestedModel = null;
           try {
             const data = await response.json();
-            if (data && data.error) errMsg = data.error;
+            if (data && data.error) {
+              errMsg = data.error;
+              errorCode = data.error_code;
+              suggestedModel = data.suggested_model;
+            }
           } catch {}
+          
+          // Special handling for quota exceeded (429)
+          if (errorCode === 'QUOTA_EXCEEDED' || response.status === 429) {
+            typingIndicator.style.display = 'none';
+            
+            // Add error message to chat with suggestion
+            const errorDiv = document.createElement("div");
+            errorDiv.className = "msg-bot error-message";
+            
+            let errorMessage = escapeHtml(errMsg);
+            if (suggestedModel) {
+              errorMessage += `<br><br><button onclick="document.getElementById('model-provider').value='${suggestedModel}'; window.chatModel='${suggestedModel}'; localStorage.setItem('model', '${suggestedModel}'); showMessage('chat-msg', 'Model diganti ke ${suggestedModel}', 'success');" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 8px;">🔄 Ganti ke ${suggestedModel}</button>`;
+            }
+            
+            errorDiv.innerHTML = `
+              <div class="message-avatar"><i class="fas fa-exclamation-circle"></i></div>
+              <div class="message-body">
+                <div class="message-content" style="color: #f59e0b;">
+                  <strong>⏱️ Kuota API Habis</strong><br>
+                  ${errorMessage}
+                </div>
+              </div>
+            `;
+            chatBox.appendChild(errorDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            showMessage('chat-msg', 'Kuota model habis. Silakan pilih model lain.', 'warning');
+            return;
+          }
+          
+          // Special handling for premium restrictions
+          if (errorCode === 'OPENAI_PREMIUM_ONLY' || errorCode === 'PREMIUM_MODEL_REQUIRED' || response.status === 403) {
+            typingIndicator.style.display = 'none';
+            
+            // Add error message to chat
+            const errorDiv = document.createElement("div");
+            errorDiv.className = "msg-bot error-message";
+            
+            let errorMessage = escapeHtml(errMsg);
+            if (errorCode === 'PREMIUM_MODEL_REQUIRED') {
+              errorMessage += '<br><br><em>Model premium: GPT-5, GPT-5 Mini, GPT-5 Nano, dan Gemini 2.5 Pro memerlukan akun Premium.</em>';
+            } else {
+              errorMessage += '<br><br><em>Anda masih menggunakan provider OpenAI di settings. Silakan ganti ke Google Gemini atau upgrade ke Premium.</em>';
+            }
+            
+            errorDiv.innerHTML = `
+              <div class="message-avatar"><i class="fas fa-exclamation-triangle"></i></div>
+              <div class="message-body">
+                <div class="message-content" style="color: #dc3545;">
+                  <strong>⚠️ Akses Terbatas</strong><br>
+                  ${errorMessage}
+                </div>
+              </div>
+            `;
+            chatBox.appendChild(errorDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            
+            showMessage('chat-msg', errMsg, 'error');
+            return;
+          }
+          
           throw new Error(errMsg);
         }
 
         const contentType = response.headers.get('Content-Type') || '';
-        let fullResponseText = '';
-        let streamDiv = null;
-        let streamContent = null;
-        const ensureStreamContainer = () => {
-          if (streamDiv) return;
-          streamDiv = document.createElement("div");
-          streamDiv.className = "msg-bot";
-          streamDiv.innerHTML = `
-            <div class="message-avatar"><i class="fas fa-brain"></i></div>
-            <div><div class="message-content streaming-content"></div></div>
-          `;
-          chatBox.appendChild(streamDiv);
-          streamContent = streamDiv.querySelector('.streaming-content');
-        };
 
         if (contentType.includes('text/event-stream')) {
           const reader = response.body.getReader();
@@ -2380,7 +2820,7 @@ async function init() {
           let data = null;
           let isJson = false;
           try {
-            const rawText = await response.clone().text();
+            const rawText = await response.text();
             // Simple heuristic to detect JSON
             isJson = rawText.trim().startsWith('{') || rawText.trim().startsWith('[');
             if (isJson) {
@@ -2402,7 +2842,7 @@ async function init() {
               ensureStreamContainer();
               streamContent.innerHTML = `❌ ${escapeHtml(data.error)}`;
             } else {
-              const answer = (data.answer || data.content || data.text || '')
+              const answer = (data.answer || data.content || data.text || '');
               ensureStreamContainer();
               fullResponseText = answer;
               streamContent.innerHTML = marked.parse(answer);
@@ -2414,17 +2854,15 @@ async function init() {
         if (fullResponseText) {
           addMessageToActiveSession('assistant', fullResponseText);
           // Add action buttons
-          if (streamDiv) {
-            streamDiv.querySelector('div > div').insertAdjacentHTML('beforeend', `
-            <div class="message-actions">
-              <button class="message-action-btn" onclick="copyMessage('stream-${Date.now()}')" title="Copy">
-                <i class="fas fa-copy"></i> Copy
+          if (streamDiv && streamActions) {
+            streamActions.innerHTML = `
+              <button class="message-action-btn" onclick="copyMessage('${streamMessageId}')" title="Copy response">
+                <i class="fas fa-copy"></i>
               </button>
-              <button class="message-action-btn" onclick="regenerateResponse()" title="Regenerate">
-                <i class="fas fa-redo"></i> Regenerate
+              <button class="message-action-btn" onclick="regenerateResponse()" title="Redo">
+                <i class="fas fa-redo"></i>
               </button>
-            </div>
-          `);
+            `;
           }
           // Check for success indicators and reload data
           if (fullResponseText.includes("✅") || fullResponseText.includes("berhasil")) {
@@ -2439,8 +2877,16 @@ async function init() {
         const box = document.getElementById("chat-box");
         if (!streamDiv) ensureStreamContainer();
         
+        // Check for timeout
+        if (error.name === 'AbortError') {
+          const currentLang = localStorage.getItem('language') || 'id';
+          const timeoutMsg = currentLang === 'id'
+            ? '⏱️ Permintaan timeout (lebih dari 60 detik). Silakan coba lagi atau cek koneksi internet Anda.'
+            : '⏱️ Request timeout (over 60 seconds). Please try again or check your internet connection.';
+          streamContent.innerHTML = timeoutMsg;
+        }
         // Check for OCR-specific error
-        if (error.message && error.message.includes('OCR_NOT_ENABLED')) {
+        else if (error.message && error.message.includes('OCR_NOT_ENABLED')) {
           const currentLang = localStorage.getItem('language') || 'id';
           const errorMsg = currentLang === 'id'
             ? 'Fitur upload gambar belum diaktifkan. Silakan aktifkan OCR di <a href="/settings.html" style="color: #3b82f6; text-decoration: underline;">Pengaturan</a> terlebih dahulu.'

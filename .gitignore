@@ -1,50 +1,102 @@
-# Python
+# ==========================================
+# Python Environment
+# ==========================================
 .venv/
+venv/
+env/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+*.egg-info/
+dist/
+build/
 
-# Environment
+# ==========================================
+# Sensitive & Security - NEVER COMMIT
+# ==========================================
 .env
 *.env
 !.env.example
+backend/vision-key.json
+*.pem
+*.key
+*.crt
+*.secret
 
-# Database
+# ==========================================
+# Database - Local Development Only
+# ==========================================
 *.db
 *.sqlite
 *.sqlite3
 backend/finance.db
 
-# Development & Testing
+# ==========================================
+# Logs & Output - Development Only
+# ==========================================
+*.log
+backend/server.log
+output.txt
+*.out
+
+# ==========================================
+# Testing - Keep tests/ but ignore results
+# ==========================================
+backend/tests/__pycache__/
+backend/tests/*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ==========================================
+# Development Files - Not for Production
+# ==========================================
 backend/archive/
 backend/notebook.ipynb
-backend/vision-key.json
-backend/server.log
-*.log
-test_*.py
+backend/*.backup
+backend/*.bak
 
-# Uploads
+# ==========================================
+# Uploads - User Generated Content
+# ==========================================
 public/uploads/avatars/*
 !public/uploads/avatars/.gitkeep
 public/uploads/chat_images/*
 !public/uploads/chat_images/.gitkeep
 
-# IDE
+# ==========================================
+# IDE & Editor
+# ==========================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
 
-# OS
+# ==========================================
+# OS Files
+# ==========================================
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Render
+# ==========================================
+# Deployment Platform
+# ==========================================
 .render/
 
-# Documentation
-*.md
+# ==========================================
+# Documentation - Keep Important Docs
+# ==========================================
+# Allow README and important documentation
 !README.md
+!IMPORT_REFERENCE.md
+!REFACTORING_SUMMARY.md
+# But ignore temporary docs
+*_DRAFT.md
+*_WIP.md
