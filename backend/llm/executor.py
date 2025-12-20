@@ -546,9 +546,15 @@ def _execute_transfer_funds(user_id: int, args: Dict[str, Any]) -> Dict[str, Any
             """INSERT INTO transactions 
                (user_id, date, type, category, description, amount, account) 
                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (user_id, date or datetime.now().strftime("%Y-%m-%d"), "expense", 
-             "Transfer", f"Transfer to {to_account}: {description}", 
-             amount, from_account)
+            (
+                user_id,
+                date or datetime.now().strftime("%Y-%m-%d"),
+                "expense",
+                "Transfer",
+                f"Transfer to {to_account}: {description}",
+                amount,
+                from_account,
+            ),
         )
 
         # Insert credit transaction to target account
@@ -556,9 +562,15 @@ def _execute_transfer_funds(user_id: int, args: Dict[str, Any]) -> Dict[str, Any
             """INSERT INTO transactions 
                (user_id, date, type, category, description, amount, account) 
                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (user_id, date or datetime.now().strftime("%Y-%m-%d"), "income",
-             "Transfer", f"Transfer from {from_account}: {description}",
-             amount, to_account)
+            (
+                user_id,
+                date or datetime.now().strftime("%Y-%m-%d"),
+                "income",
+                "Transfer",
+                f"Transfer from {from_account}: {description}",
+                amount,
+                to_account,
+            ),
         )
 
         db.commit()
