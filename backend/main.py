@@ -291,7 +291,7 @@ def send_otp_email(to_email: str, otp_code: str, user_name: str) -> bool:
                         </div>
                         <p style="margin: 0 0 20px 0; color: #374151; font-size: 15px; line-height: 1.6;">Kode ini akan kedaluwarsa dalam <strong>10 menit</strong>.</p>
                         <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 24px 0;">
-                          <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">G��n+� <strong>Jangan bagikan kode ini</strong> kepada siapa pun, termasuk tim SmartBudget Assistant. Kami tidak akan pernah meminta kode verifikasi Anda.</p>
+                          <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">⚠️ <strong>Jangan bagikan kode ini</strong> kepada siapa pun, termasuk tim SmartBudget Assistant. Kami tidak akan pernah meminta kode verifikasi Anda.</p>
                         </div>
                       </td>
                     </tr>
@@ -437,7 +437,7 @@ def send_password_reset_email(
                       <td style="padding: 0 30px 40px 30px;">
                         <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px 20px; border-radius: 6px;">
                           <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.5;">
-                            <strong>G��n+� Penting:</strong> Tautan ini akan kedaluwarsa dalam <strong>1 jam</strong> untuk keamanan akun Anda.
+                            <strong>⚠️ Penting:</strong> Tautan ini akan kedaluwarsa dalam <strong>1 jam</strong> untuk keamanan akun Anda.
                           </p>
                         </div>
                       </td>
@@ -480,13 +480,13 @@ Klik tautan berikut untuk mereset password:
 {reset_url}
 
 PENTING:
-G�� Tautan ini akan kedaluwarsa dalam 1 jam
-G�� Jika Anda tidak meminta reset password, abaikan email ini
-G�� Password Anda tidak akan diubah kecuali Anda mengklik tautan di atas
+⚠️ Tautan ini akan kedaluwarsa dalam 1 jam
+⚠️ Jika Anda tidak meminta reset password, abaikan email ini
+⚠️ Password Anda tidak akan diubah kecuali Anda mengklik tautan di atas
 
 ---
 Email otomatis - Jangan balas email ini
--� 2025 SmartBudget Assistant
+© 2025 SmartBudget Assistant
         """
 
     # Try SendGrid first
@@ -2278,7 +2278,7 @@ def chat_api():
 
                 summary = "\n".join(
                     [
-                        ("G��" if r["success"] else "G��") + " " + r["message"]
+                        ("✓" if r["success"] else "✗") + " " + r["message"]
                         for r in results
                     ]
                 )
@@ -2514,7 +2514,7 @@ Action tersedia:
                             {"answer": answer, "session_id": session_id}
                         ), 200
 
-                    prefix = "G��" if res["success"] else "G��"
+                    prefix = "✓" if res["success"] else "✗"
                     remaining = text.replace(jm.group(0), "").strip()
                     # On failure, avoid appending model's remaining text to prevent mixed messages
                     if not res["success"]:
