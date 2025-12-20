@@ -259,12 +259,16 @@ def _execute_create_savings_goal(user_id: int, args: Dict[str, Any]) -> Dict[str
                 if parsed_dt:
                     target_date = parsed_dt.date().isoformat()
                 else:
-                    return {
-                        "success": False,
-                        "message": "Format tanggal tidak valid",
-                        "code": "INVALID_DATE",
-                        "ask_user": "Mohon berikan tanggal dalam format YYYY-MM-DD (contoh: 2026-02-28)",
-                    }
+                    # If dateparser fails, try to handle year-only format
+                    if re.match(r'^\d{4}$', target_date):
+                        target_date = f"{target_date}-12-31"
+                    else:
+                        return {
+                            "success": False,
+                            "message": "Format tanggal tidak valid. Gunakan YYYY-MM-DD atau format tanggal lengkap",
+                            "code": "INVALID_DATE",
+                            "ask_user": "Mohon berikan tanggal dalam format YYYY-MM-DD (contoh: 2026-02-28) atau tanggal lengkap",
+                        }
 
     try:
         logger.info(
