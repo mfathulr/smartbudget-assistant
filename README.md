@@ -590,7 +590,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 👨‍💻 Author
 
-**Muhammad Fathul Hakim**
+**Muhammad Fathul Radhiansyah**
 
 - 🐙 GitHub: [@mfathulr](https://github.com/mfathulr)
 - 🌐 Live Demo: [smartbudget-assistant.onrender.com](https://smartbudget-assistant.onrender.com)
@@ -650,6 +650,6 @@ Planned features for future releases:
 [![GitHub Stars](https://img.shields.io/github/stars/mfathulr/smartbudget-assistant?style=social)](https://github.com/mfathulr/smartbudget-assistant)
 [![GitHub Forks](https://img.shields.io/github/forks/mfathulr/smartbudget-assistant?style=social)](https://github.com/mfathulr/smartbudget-assistant)
 
-**Made with ❤️ by [Muhammad Fathul Hakim](https://github.com/mfathulr)**
+**Made with ❤️ by [Muhammad Fathul Radhiansyah](https://github.com/mfathulr)**
 
 </div>
