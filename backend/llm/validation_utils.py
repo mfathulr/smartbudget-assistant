@@ -30,18 +30,15 @@ COMMON_ACCOUNT_ALIASES = {
     "bank bca": "BCA",
     "bank central asia": "BCA",
     "bca transfer": "BCA",
-    
     # Maybank variations
     "maybank": "Maybank",
     "bank maybank": "Maybank",
     "maybank 2u": "Maybank",
     "maybank malaysia": "Maybank",
-    
     # Seabank variations
     "seabank": "Seabank",
     "sea bank": "Seabank",
     "bank sea": "Seabank",
-    
     # E-wallet variations
     "gopay": "Gopay",
     "go-pay": "Gopay",
@@ -51,11 +48,9 @@ COMMON_ACCOUNT_ALIASES = {
     "shopee": "Shopeepay",
     "ovo": "Ovo",
     "ovo pay": "Ovo",
-    
     # Jago variations
     "jago": "Jago",
     "bank jago": "Jago",
-    
     # Others
     "isaku": "ISaku",
     "i-saku": "ISaku",
@@ -319,19 +314,19 @@ def validate_name(
 def parse_natural_date(date_str: str) -> Optional[str]:
     """
     Parse Indonesian natural language dates
-    
+
     Args:
         date_str: Natural language date string
-        
+
     Returns:
         Normalized date in YYYY-MM-DD format or None
     """
     if not date_str:
         return None
-    
+
     date_str = date_str.lower().strip()
     today = datetime.now().date()
-    
+
     # Exact matches for common terms
     natural_dates = {
         "hari ini": today,
@@ -345,8 +340,10 @@ def parse_natural_date(date_str: str) -> Optional[str]:
         "next week": today + timedelta(days=7),
         "minggu lalu": today - timedelta(days=7),
         "last week": today - timedelta(days=7),
-        "bulan depan": (today.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1),
-        "next month": (today.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1),
+        "bulan depan": (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+        - timedelta(days=1),
+        "next month": (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+        - timedelta(days=1),
         "bulan lalu": (today.replace(day=1) - timedelta(days=1)).replace(day=1),
         "last month": (today.replace(day=1) - timedelta(days=1)).replace(day=1),
         "tahun depan": today.replace(year=today.year + 1),
@@ -354,26 +351,42 @@ def parse_natural_date(date_str: str) -> Optional[str]:
         "tahun lalu": today.replace(year=today.year - 1),
         "last year": today.replace(year=today.year - 1),
     }
-    
+
     if date_str in natural_dates:
         return natural_dates[date_str].isoformat()
-    
+
     # Month mappings (Indonesian)
     months_id = {
-        "januari": 1, "januari": 1, "jan": 1,
-        "februari": 2, "feb": 2,
-        "maret": 3, "mar": 3,
-        "april": 4, "apr": 4,
+        "januari": 1,
+        "januari": 1,
+        "jan": 1,
+        "februari": 2,
+        "feb": 2,
+        "maret": 3,
+        "mar": 3,
+        "april": 4,
+        "apr": 4,
         "mei": 5,
-        "juni": 6, "jun": 6,
-        "juli": 7, "jul": 7,
-        "agustus": 8, "agt": 8, "aug": 8,
-        "september": 9, "sept": 9, "sep": 9,
-        "oktober": 10, "okt": 10, "oct": 10,
-        "november": 11, "nov": 11,
-        "desember": 12, "des": 12, "dec": 12,
+        "juni": 6,
+        "jun": 6,
+        "juli": 7,
+        "jul": 7,
+        "agustus": 8,
+        "agt": 8,
+        "aug": 8,
+        "september": 9,
+        "sept": 9,
+        "sep": 9,
+        "oktober": 10,
+        "okt": 10,
+        "oct": 10,
+        "november": 11,
+        "nov": 11,
+        "desember": 12,
+        "des": 12,
+        "dec": 12,
     }
-    
+
     # Try pattern: "25 desember 2025" or "25 desember"
     pattern_with_year = r"(\d{1,2})\s+([a-z]+)\s+(\d{4})"
     match = re.match(pattern_with_year, date_str)
@@ -386,7 +399,7 @@ def parse_natural_date(date_str: str) -> Optional[str]:
                 return dt.isoformat()
             except ValueError:
                 return None
-    
+
     # Try pattern: "25 desember" (use current year)
     pattern_no_year = r"(\d{1,2})\s+([a-z]+)$"
     match = re.match(pattern_no_year, date_str)
@@ -402,7 +415,7 @@ def parse_natural_date(date_str: str) -> Optional[str]:
                 return dt.isoformat()
             except ValueError:
                 return None
-    
+
     return None
 
 
@@ -539,20 +552,17 @@ def get_error_message(code: str, **kwargs) -> str:
 
 
 def format_confirmation_request(
-    field_name: str,
-    parsed_value: str,
-    original_input: str,
-    field_type: str = "field"
+    field_name: str, parsed_value: str, original_input: str, field_type: str = "field"
 ) -> Dict[str, Any]:
     """
     Format a confirmation request when parsing is ambiguous
-    
+
     Args:
         field_name: Name of field (e.g., "Tanggal", "Akun")
         parsed_value: Parsed/normalized value
         original_input: Original user input
         field_type: Type of field (date, account, etc)
-        
+
     Returns:
         Dictionary with confirmation message and details
     """
@@ -561,9 +571,9 @@ def format_confirmation_request(
         "account": f"Saya interpretasi akun '{original_input}' menjadi {parsed_value}.\nBenar?",
         "field": f"Saya interpretasi '{original_input}' menjadi {parsed_value}.\nBenar?",
     }
-    
+
     message = messages.get(field_type, messages["field"])
-    
+
     return {
         "requires_confirmation": True,
         "confirmation_message": message,
@@ -577,10 +587,10 @@ def format_confirmation_request(
 def validate_account_with_confirmation(account_name: str) -> Dict[str, Any]:
     """
     Validate account and ask for confirmation if ambiguous
-    
+
     Args:
         account_name: Account name to validate
-        
+
     Returns:
         Dictionary with validation result and optional confirmation request
     """
@@ -591,37 +601,40 @@ def validate_account_with_confirmation(account_name: str) -> Dict[str, Any]:
             "message": "Nama akun harus diisi",
             "ask_user": "Dari akun mana?\nPilihan: Cash, BCA, Gopay, Maybank, Seabank, dan lainnya",
         }
-    
+
     account_name = account_name.strip()
     normalized = find_similar_account(account_name)
-    
+
     if normalized:
         # If input is exact match, no confirmation needed
-        if account_name.lower() in VALID_ACCOUNTS or account_name.lower() in COMMON_ACCOUNT_ALIASES:
+        if (
+            account_name.lower() in VALID_ACCOUNTS
+            or account_name.lower() in COMMON_ACCOUNT_ALIASES
+        ):
             return {
                 "success": True,
                 "account": normalized,
                 "requires_confirmation": False,
             }
-        
+
         # If fuzzy matched, ask for confirmation
         return format_confirmation_request(
             "Akun", normalized, account_name, "account"
         ) | {"success": True, "account": normalized}
-    
+
     # Not found - suggest alternatives
     similar = get_close_matches(
         account_name.lower(), list(COMMON_ACCOUNT_ALIASES.keys()), n=3, cutoff=0.4
     )
-    
+
     suggestions = [COMMON_ACCOUNT_ALIASES[s] for s in similar] if similar else []
     valid_list = ", ".join(VALID_ACCOUNTS.values())
-    
+
     error_msg = f"Akun '{account_name}' tidak dikenali"
     if suggestions:
         error_msg += f"\nApakah maksud: {' atau '.join(suggestions)}?"
     error_msg += f"\n\nAkun tersedia:\n{valid_list}"
-    
+
     return {
         "success": False,
         "code": "INVALID_ACCOUNT",
@@ -634,10 +647,10 @@ def validate_account_with_confirmation(account_name: str) -> Dict[str, Any]:
 def validate_date_with_confirmation(date_str: str) -> Dict[str, Any]:
     """
     Validate date and ask for confirmation if natural language was parsed
-    
+
     Args:
         date_str: Date string to validate
-        
+
     Returns:
         Dictionary with validation result and optional confirmation request
     """
@@ -647,21 +660,36 @@ def validate_date_with_confirmation(date_str: str) -> Dict[str, Any]:
             "date": None,
             "requires_confirmation": False,
         }
-    
+
     date_str = date_str.strip()
-    
+
     # Check if it's a natural language term (exact match)
     natural_terms = [
-        "hari ini", "today", "sekarang", "kemarin", "yesterday", "besok", "tomorrow",
-        "minggu depan", "next week", "minggu lalu", "last week",
-        "bulan depan", "next month", "bulan lalu", "last month",
-        "tahun depan", "next year", "tahun lalu", "last year"
+        "hari ini",
+        "today",
+        "sekarang",
+        "kemarin",
+        "yesterday",
+        "besok",
+        "tomorrow",
+        "minggu depan",
+        "next week",
+        "minggu lalu",
+        "last week",
+        "bulan depan",
+        "next month",
+        "bulan lalu",
+        "last month",
+        "tahun depan",
+        "next year",
+        "tahun lalu",
+        "last year",
     ]
-    
+
     is_natural = date_str.lower() in natural_terms
-    
+
     is_valid, normalized_date, error_msg = validate_date(date_str)
-    
+
     if not is_valid:
         return {
             "success": False,
@@ -669,20 +697,23 @@ def validate_date_with_confirmation(date_str: str) -> Dict[str, Any]:
             "message": error_msg,
             "ask_user": error_msg,
         }
-    
+
     # If natural language or fuzzy parsed, ask for confirmation
-    if is_natural or (normalized_date != date_str and date_str not in ["2025-12-31", "2025"]):
+    if is_natural or (
+        normalized_date != date_str and date_str not in ["2025-12-31", "2025"]
+    ):
         # Format the date nicely for confirmation
         try:
             dt = datetime.fromisoformat(normalized_date)
             formatted = dt.strftime("%A, %d %B %Y")
         except:
             formatted = normalized_date
-        
-        return format_confirmation_request(
-            "Tanggal", formatted, date_str, "date"
-        ) | {"success": True, "date": normalized_date}
-    
+
+        return format_confirmation_request("Tanggal", formatted, date_str, "date") | {
+            "success": True,
+            "date": normalized_date,
+        }
+
     return {
         "success": True,
         "date": normalized_date,

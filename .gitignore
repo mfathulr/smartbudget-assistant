@@ -108,12 +108,12 @@ desktop.ini
 # ==========================================
 # Ignore all markdown files by default
 *.md
+*.txt
 # Allow README and critical documentation
 !README.md
 !.gitkeep
 # Also ignore other doc formats
 *.rst
-*.txt
 docs/
 documentation/
 # But ignore temporary docs
