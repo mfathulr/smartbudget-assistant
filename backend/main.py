@@ -1373,8 +1373,8 @@ def transactions_api():
                 return jsonify(
                     {
                         "success": False,
-                        "message": "need_date",
-                        "ask_user": "Mohon berikan tanggal dalam format YYYY-MM-DD (contoh: 2026-02-28).",
+                        "message": "Format tanggal belum tepat 🤔",
+                        "ask_user": "Coba pakai format 'YYYY-MM-DD' atau hari (contoh: 2025-12-20). Atau cukup bilang 'hari ini', 'kemarin', dll!",
                     }
                 ), 400
             date_str = nd
@@ -1390,8 +1390,8 @@ def transactions_api():
             return jsonify(
                 {
                     "success": False,
-                    "message": "need_amount",
-                    "ask_user": "Jumlah harus berupa angka.",
+                    "message": "Jumlahnya harus berupa angka 💰",
+                    "ask_user": "Coba lagi dengan angka aja, misal '500000' atau '500 ribu'",
                 }
             ), 400
         account = (data.get("account") or "").strip()
@@ -1409,24 +1409,24 @@ def transactions_api():
             return jsonify(
                 {
                     "success": False,
-                    "message": "need_type",
-                    "ask_user": "Apakah ini pemasukan (income), pengeluaran (expense), atau transfer%s",
+                    "message": "Jenis transaksi apa? 🤷",
+                    "ask_user": "Ini pemasukan, pengeluaran, atau transfer? Beritahu saya!",
                 }
             ), 400
         if amount <= 0 or amount > 1_000_000_000:
             return jsonify(
                 {
                     "success": False,
-                    "message": "need_amount",
-                    "ask_user": "Mohon sebutkan jumlah transaksi (0 < jumlah <= 1 miliar).",
+                    "message": "Jumlahnya masuk akal gak? 🤔",
+                    "ask_user": "Jumlahnya harus positif dan max 1 miliar. Coba lagi yuk!",
                 }
             ), 400
         if tx_type in ("expense", "income") and not category:
             return jsonify(
                 {
                     "success": False,
-                    "message": "need_category",
-                    "ask_user": "Mohon sebutkan kategori transaksi.",
+                    "message": "Kategorinya apa? 🏷️",
+                    "ask_user": "Sebutkan kategori transaksi ya. Biar saya bisa bantu track pengeluaran Anda!",
                 }
             ), 400
 

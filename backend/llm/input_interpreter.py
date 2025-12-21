@@ -22,6 +22,7 @@ from validation_utils import (
 
 class MatchConfidence(Enum):
     """Confidence level for fuzzy matching"""
+
     EXACT = "exact"  # Exact match
     HIGH = "high"  # Fuzzy match > 0.85
     MEDIUM = "medium"  # Fuzzy match 0.65-0.85
@@ -32,7 +33,7 @@ class MatchConfidence(Enum):
 @dataclass
 class InterpretationResult:
     """Result of user input interpretation"""
-    
+
     field_type: str  # "account", "date", "category", "amount", etc
     original_input: str  # Original user input
     interpreted_value: Any  # Parsed/normalized value
@@ -40,7 +41,7 @@ class InterpretationResult:
     needs_confirmation: bool  # Should ask user to confirm
     alternatives: Optional[List[str]] = None  # Alternative interpretations
     explanation: Optional[str] = None  # Human-readable explanation
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary response"""
         result = {
@@ -50,18 +51,18 @@ class InterpretationResult:
             "confidence": self.confidence.value,
             "needs_confirmation": self.needs_confirmation,
         }
-        
+
         if self.alternatives:
             result["alternatives"] = self.alternatives
         if self.explanation:
             result["explanation"] = self.explanation
-            
+
         return result
 
 
 class InputInterpreter:
     """Interpret user input across all field types"""
-    
+
     def __init__(self):
         """Initialize interpreter with fuzzy matching thresholds"""
         self.THRESHOLDS = {
@@ -70,14 +71,14 @@ class InputInterpreter:
             "medium": 0.65,
             "low": 0.40,
         }
-    
+
     def interpret_account(self, user_input: str) -> InterpretationResult:
         """
         Interpret account name with fuzzy matching
-        
+
         Args:
             user_input: User-provided account name
-            
+
         Returns:
             InterpretationResult with confidence and alternatives
         """
@@ -88,12 +89,12 @@ class InputInterpreter:
                 interpreted_value=None,
                 confidence=MatchConfidence.NO_MATCH,
                 needs_confirmation=False,
-                explanation="Akun tidak diberikan",
+                explanation="Akun belum disebutkan. Coba kasih tahu akun mana yang dipakai ya!",
             )
-        
+
         user_input = user_input.strip()
         user_lower = user_input.lower()
-        
+
         # Check exact match in aliases (case-insensitive)
         if user_lower in COMMON_ACCOUNT_ALIASES:
             return InterpretationResult(
@@ -103,7 +104,7 @@ class InputInterpreter:
                 confidence=MatchConfidence.EXACT,
                 needs_confirmation=False,
             )
-        
+
         # Check exact match in main dict
         if user_lower in VALID_ACCOUNTS:
             return InterpretationResult(
@@ -113,28 +114,30 @@ class InputInterpreter:
                 confidence=MatchConfidence.EXACT,
                 needs_confirmation=False,
             )
-        
+
         # Fuzzy match against aliases (case-insensitive)
         alias_matches = get_close_matches(
             user_lower,
             COMMON_ACCOUNT_ALIASES.keys(),
             n=3,
-            cutoff=self.THRESHOLDS["low"]
+            cutoff=self.THRESHOLDS["low"],
         )
-        
+
         if alias_matches:
             best_match = alias_matches[0]
             best_value = COMMON_ACCOUNT_ALIASES[best_match]
-            
+
             # Determine confidence level
             match_ratio = self._get_similarity_ratio(user_lower, best_match)
             confidence = self._get_confidence_level(match_ratio)
-            
+
             # Alternatives
-            alternatives = [
-                COMMON_ACCOUNT_ALIASES[m] for m in alias_matches[1:3]
-            ] if len(alias_matches) > 1 else None
-            
+            alternatives = (
+                [COMMON_ACCOUNT_ALIASES[m] for m in alias_matches[1:3]]
+                if len(alias_matches) > 1
+                else None
+            )
+
             return InterpretationResult(
                 field_type="account",
                 original_input=user_input,
@@ -142,29 +145,28 @@ class InputInterpreter:
                 confidence=confidence,
                 needs_confirmation=confidence != MatchConfidence.EXACT,
                 alternatives=alternatives,
-                explanation=f"Saya interpretasi '{user_input}' sebagai akun {best_value}"
-                           + (f"\nAlternatif: {', '.join(alternatives)}" if alternatives else ""),
+                explanation=f"Saya kira '{user_input}' itu akun {best_value}. Yuk saya bantu yakinkan!"
+                + (f"\nKalau bukan, ada pilihan lain: {', '.join(alternatives)}" if alternatives else ""),
             )
-        
+
         # Fuzzy match against main dict (fallback)
         dict_matches = get_close_matches(
-            user_lower,
-            VALID_ACCOUNTS.keys(),
-            n=3,
-            cutoff=self.THRESHOLDS["low"]
+            user_lower, VALID_ACCOUNTS.keys(), n=3, cutoff=self.THRESHOLDS["low"]
         )
-        
+
         if dict_matches:
             best_match = dict_matches[0]
             best_value = VALID_ACCOUNTS[best_match]
-            
+
             match_ratio = self._get_similarity_ratio(user_lower, best_match)
             confidence = self._get_confidence_level(match_ratio)
-            
-            alternatives = [
-                VALID_ACCOUNTS[m] for m in dict_matches[1:3]
-            ] if len(dict_matches) > 1 else None
-            
+
+            alternatives = (
+                [VALID_ACCOUNTS[m] for m in dict_matches[1:3]]
+                if len(dict_matches) > 1
+                else None
+            )
+
             return InterpretationResult(
                 field_type="account",
                 original_input=user_input,
@@ -172,10 +174,10 @@ class InputInterpreter:
                 confidence=confidence,
                 needs_confirmation=confidence != MatchConfidence.EXACT,
                 alternatives=alternatives,
-                explanation=f"Saya interpretasi '{user_input}' sebagai akun {best_value}"
-                           + (f"\nAlternatif: {', '.join(alternatives)}" if alternatives else ""),
+                explanation=f"Saya kira '{user_input}' itu akun {best_value}. Yuk saya bantu yakinkan!"
+                + (f"\nKalau bukan, ada pilihan lain: {', '.join(alternatives)}" if alternatives else ""),
             )
-        
+
         # No match
         valid_accounts = list(VALID_ACCOUNTS.values())
         return InterpretationResult(
@@ -184,17 +186,17 @@ class InputInterpreter:
             interpreted_value=None,
             confidence=MatchConfidence.NO_MATCH,
             needs_confirmation=False,
-            explanation=f"Akun '{user_input}' tidak dikenali. "
-                       f"Pilihan: {', '.join(valid_accounts)}",
+            explanation=f"Hmm, '{user_input}' bukan akun yang aku kenal. "
+            f"Mungkin maksud Anda salah satu dari ini: {', '.join(valid_accounts)}?",
         )
-    
+
     def interpret_date(self, user_input: str) -> InterpretationResult:
         """
         Interpret date string with natural language support
-        
+
         Args:
             user_input: User-provided date string
-            
+
         Returns:
             InterpretationResult with parsed date and confidence
         """
@@ -205,43 +207,59 @@ class InputInterpreter:
                 interpreted_value=None,
                 confidence=MatchConfidence.EXACT,
                 needs_confirmation=False,
-                explanation="Tanggal opsional (jika kosong, gunakan hari ini)",
+                explanation="Tanggal opsional - aku akan pakai hari ini kalau Anda tidak sebutkan.",
             )
-        
+
         user_input = user_input.strip()
-        
+
         # Try natural language parsing
         parsed_date = parse_natural_date(user_input)
-        
+
         if parsed_date:
             # Check if input is exact natural language term
             natural_terms = [
-                "hari ini", "today", "sekarang", "kemarin", "yesterday",
-                "besok", "tomorrow", "minggu depan", "next week",
-                "minggu lalu", "last week", "bulan depan", "next month",
-                "bulan lalu", "last month", "tahun depan", "next year",
-                "tahun lalu", "last year"
+                "hari ini",
+                "today",
+                "sekarang",
+                "kemarin",
+                "yesterday",
+                "besok",
+                "tomorrow",
+                "minggu depan",
+                "next week",
+                "minggu lalu",
+                "last week",
+                "bulan depan",
+                "next month",
+                "bulan lalu",
+                "last month",
+                "tahun depan",
+                "next year",
+                "tahun lalu",
+                "last year",
             ]
-            
+
             is_natural_term = user_input.lower() in natural_terms
-            confidence = MatchConfidence.EXACT if is_natural_term else MatchConfidence.MEDIUM
-            
+            confidence = (
+                MatchConfidence.EXACT if is_natural_term else MatchConfidence.MEDIUM
+            )
+
             # Format date for explanation
             try:
                 dt = datetime.fromisoformat(parsed_date)
                 formatted = dt.strftime("%A, %d %B %Y")
             except:
                 formatted = parsed_date
-            
+
             return InterpretationResult(
                 field_type="date",
                 original_input=user_input,
                 interpreted_value=parsed_date,
                 confidence=confidence,
                 needs_confirmation=not is_natural_term,
-                explanation=f"Saya interpretasi '{user_input}' menjadi {formatted}",
+                explanation=f"Oke, '{user_input}' itu {formatted}. Pas, kan?",
             )
-        
+
         # Try strict YYYY-MM-DD format
         try:
             dt = datetime.strptime(user_input, "%Y-%m-%d")
@@ -254,7 +272,7 @@ class InputInterpreter:
             )
         except ValueError:
             pass
-        
+
         # Try year-only format
         if re.match(r"^\d{4}$", user_input):
             normalized = f"{user_input}-12-31"
@@ -264,9 +282,9 @@ class InputInterpreter:
                 interpreted_value=normalized,
                 confidence=MatchConfidence.MEDIUM,
                 needs_confirmation=True,
-                explanation=f"Saya interpretasi '{user_input}' menjadi 31 Desember {user_input}",
+                explanation=f"Saya pikir '{user_input}' maksudnya 31 Desember {user_input}. Betul?",
             )
-        
+
         # No match
         return InterpretationResult(
             field_type="date",
@@ -274,18 +292,19 @@ class InputInterpreter:
             interpreted_value=None,
             confidence=MatchConfidence.NO_MATCH,
             needs_confirmation=False,
-            explanation="Format tanggal tidak valid. "
-                       "Coba: 'hari ini', '25 desember', '2025-12-25', atau '2025'",
+            explanation="Wah, formatnya agak aneh. Coba dengan 'hari ini', '25 desember', '2025-12-25', atau tahunnya aja '2025'!",
         )
-    
-    def interpret_category(self, user_input: str, tx_type: str = "expense") -> InterpretationResult:
+
+    def interpret_category(
+        self, user_input: str, tx_type: str = "expense"
+    ) -> InterpretationResult:
         """
         Interpret category with fuzzy matching
-        
+
         Args:
             user_input: User-provided category
             tx_type: Transaction type (income/expense)
-            
+
         Returns:
             InterpretationResult with category match
         """
@@ -297,12 +316,12 @@ class InputInterpreter:
                 interpreted_value=None,
                 confidence=MatchConfidence.NO_MATCH,
                 needs_confirmation=False,
-                explanation=f"Kategori tersedia: {', '.join(categories)}",
+                explanation=f"Harus pilih kategori dari: {', '.join(categories)}. Mana yang cocok?",
             )
-        
+
         user_input = user_input.strip()
         valid_categories = VALID_CATEGORIES_BY_TYPE.get(tx_type, [])
-        
+
         # Check exact match (case-insensitive)
         for cat in valid_categories:
             if cat.lower() == user_input.lower():
@@ -313,31 +332,35 @@ class InputInterpreter:
                     confidence=MatchConfidence.EXACT,
                     needs_confirmation=False,
                 )
-        
+
         # Fuzzy match
         matches = get_close_matches(
             user_input.lower(),
             [c.lower() for c in valid_categories],
             n=3,
-            cutoff=self.THRESHOLDS["low"]
+            cutoff=self.THRESHOLDS["low"],
         )
-        
+
         if matches:
             # Find original case
             best_match = next(
                 (cat for cat in valid_categories if cat.lower() == matches[0]),
-                matches[0]
+                matches[0],
             )
-            
+
             match_ratio = self._get_similarity_ratio(user_input.lower(), matches[0])
             confidence = self._get_confidence_level(match_ratio)
-            
+
             # Alternatives
-            alternatives = [
-                next((cat for cat in valid_categories if cat.lower() == m), m)
-                for m in matches[1:3]
-            ] if len(matches) > 1 else None
-            
+            alternatives = (
+                [
+                    next((cat for cat in valid_categories if cat.lower() == m), m)
+                    for m in matches[1:3]
+                ]
+                if len(matches) > 1
+                else None
+            )
+
             return InterpretationResult(
                 field_type="category",
                 original_input=user_input,
@@ -345,10 +368,10 @@ class InputInterpreter:
                 confidence=confidence,
                 needs_confirmation=confidence != MatchConfidence.EXACT,
                 alternatives=alternatives,
-                explanation=f"Saya interpretasi '{user_input}' sebagai kategori {best_match}"
-                           + (f"\nAlternatif: {', '.join(alternatives)}" if alternatives else ""),
+                explanation=f"Sepertinya '{user_input}' itu kategori {best_match}. Sesuai, kan?"
+                + (f"\nKalau tidak, ada juga: {', '.join(alternatives)}" if alternatives else ""),
             )
-        
+
         # No match
         return InterpretationResult(
             field_type="category",
@@ -356,23 +379,22 @@ class InputInterpreter:
             interpreted_value=None,
             confidence=MatchConfidence.NO_MATCH,
             needs_confirmation=False,
-            explanation=f"Kategori '{user_input}' tidak dikenali. "
-                       f"Pilihan: {', '.join(valid_categories)}",
+            explanation=f"Kategori '{user_input}' belum pernah aku temui. Pilih dari: {', '.join(valid_categories)} ya!",
         )
-    
+
     def format_confirmation_message(self, result: InterpretationResult) -> str:
         """
         Format a user-friendly confirmation message with natural language
-        
+
         Args:
             result: InterpretationResult to format
-            
+
         Returns:
             Formatted confirmation message
         """
         if not result.needs_confirmation or not result.interpreted_value:
             return ""
-        
+
         # Build natural language confirmation messages
         if result.field_type == "account":
             msg = f"Jadi akun yang Anda maksud adalah **{result.interpreted_value}**, benar?"
@@ -382,17 +404,18 @@ class InputInterpreter:
             msg = f"Kategorinya **{result.interpreted_value}**, setuju?"
         else:
             msg = f"{result.field_type} Anda adalah **{result.interpreted_value}**, benar?"
-        
+
         if result.alternatives:
             msg += f"\n\nAtau mungkin Anda maksud: {', '.join(result.alternatives)}?"
-        
+
         return msg
-    
+
     def _get_similarity_ratio(self, str1: str, str2: str) -> float:
         """Calculate similarity ratio between two strings"""
         from difflib import SequenceMatcher
+
         return SequenceMatcher(None, str1, str2).ratio()
-    
+
     def _get_confidence_level(self, ratio: float) -> MatchConfidence:
         """Determine confidence level from similarity ratio"""
         if ratio >= self.THRESHOLDS["exact"]:
@@ -421,17 +444,17 @@ def get_interpreter() -> InputInterpreter:
 def interpret_input(field_type: str, user_input: str, **kwargs) -> InterpretationResult:
     """
     Convenience function to interpret any field type
-    
+
     Args:
         field_type: Type of field ("account", "date", "category")
         user_input: User input string
         **kwargs: Additional arguments (e.g., tx_type for category)
-        
+
     Returns:
         InterpretationResult
     """
     interpreter = get_interpreter()
-    
+
     if field_type == "account":
         return interpreter.interpret_account(user_input)
     elif field_type == "date":
