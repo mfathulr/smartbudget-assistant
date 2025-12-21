@@ -146,16 +146,7 @@ class InterpretationMiddleware:
         Returns:
             Response dict for chat API
         """
-        msg = (
-            f"🔍 **{checkpoint.field_type.title()} Confirmation**\n\n"
-            f"User input: `{checkpoint.original_input}`\n"
-            f"Interpretasi: **{checkpoint.interpreted_value}**\n\n"
-        )
-        
-        if checkpoint.confidence == MatchConfidence.MEDIUM:
-            msg += "⚠️ Tingkat kecocokan: **Sedang**\n"
-        elif checkpoint.confidence == MatchConfidence.LOW:
-            msg += "⚠️⚠️ Tingkat kecocokan: **Rendah**\n"
+        msg = f"Saya interpretasi '{checkpoint.original_input}' sebagai **{checkpoint.interpreted_value}**\n"
         
         if checkpoint.alternatives:
             msg += f"\nAlternatif lain: {', '.join(checkpoint.alternatives)}\n"

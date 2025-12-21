@@ -20,7 +20,7 @@ class ChatIntegrationHelper:
         interpretations: Dict[str, InterpretationResult]
     ) -> str:
         """
-        Build a message that mentions all interpreted fields
+        Build a message that mentions all interpreted fields (without technical details)
         
         Args:
             interpretations: Dict of field_type -> InterpretationResult
@@ -41,16 +41,11 @@ class ChatIntegrationHelper:
             if result.confidence == MatchConfidence.NO_MATCH:
                 continue
             
-            # Build interpretation message
-            mention = f"📝 **{field_type.title()}**: Saya gunakan **{result.interpreted_value}**"
-            
-            if result.confidence == MatchConfidence.MEDIUM:
-                mention += " (cocok sedang)"
-            elif result.confidence == MatchConfidence.LOW:
-                mention += " (cocok rendah)"
+            # Build interpretation message (without technical details)
+            mention = f"💭 **{field_type.title()}**: {result.interpreted_value}"
             
             if result.alternatives:
-                mention += f"\n   Alternatif: {', '.join(result.alternatives)}"
+                mention += f" (atau {', '.join(result.alternatives)})"
             
             message_parts.append(mention)
         
@@ -66,7 +61,7 @@ class ChatIntegrationHelper:
         action_name: str = ""
     ) -> Dict[str, Any]:
         """
-        Build a complete confirmation request for user
+        Build a complete confirmation request for user (without technical details)
         
         Args:
             field_type: Type of field being confirmed
@@ -77,15 +72,12 @@ class ChatIntegrationHelper:
             Dict with confirmation message and details
         """
         confirmation_msg = (
-            f"🔍 **{field_type.title()} Confirmation**\n\n"
-            f"User input: `{result.original_input}`\n"
-            f"Interpretasi saya: **{result.interpreted_value}**\n"
+            f"Saya interpretasi '{result.original_input}' sebagai "
+            f"**{result.interpreted_value}**\n"
         )
         
-        if result.confidence == MatchConfidence.MEDIUM:
-            confirmation_msg += "Tingkat kecocokan: Sedang ⚠️\n"
-        elif result.confidence == MatchConfidence.LOW:
-            confirmation_msg += "Tingkat kecocokan: Rendah ⚠️⚠️\n"
+        if result.alternatives:
+            confirmation_msg += f"\nAlternatif lain: {', '.join(result.alternatives)}\n"
         
         confirmation_msg += "\nBenar? Respons dengan 'ya' atau 'tidak'"
         

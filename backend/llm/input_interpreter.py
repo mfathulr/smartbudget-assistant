@@ -362,7 +362,7 @@ class InputInterpreter:
     
     def format_confirmation_message(self, result: InterpretationResult) -> str:
         """
-        Format a user-friendly confirmation message
+        Format a user-friendly confirmation message (without technical details)
         
         Args:
             result: InterpretationResult to format
@@ -383,11 +383,6 @@ class InputInterpreter:
             msg += f"kategori **{result.interpreted_value}**"
         else:
             msg += f"{result.field_type} **{result.interpreted_value}**"
-        
-        if result.confidence == MatchConfidence.MEDIUM:
-            msg += " (cocok medium)"
-        elif result.confidence == MatchConfidence.LOW:
-            msg += " (cocok rendah)"
         
         if result.alternatives:
             msg += f"\n\nAlternatif lain: {', '.join(result.alternatives)}"
