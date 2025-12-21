@@ -14,6 +14,8 @@ from llm.validation_utils import (
     validate_category,
     validate_name,
     validate_date,
+    validate_account_with_confirmation,
+    validate_date_with_confirmation,
     format_amount_confirmation,
     suggest_category,
     VALID_CATEGORIES_BY_TYPE,
@@ -209,17 +211,16 @@ def _execute_add_transaction(
             "requires_clarification": True,
         }
 
-    # Validate account
-    is_valid, normalized_account, error = validate_account(account)
-    if not is_valid:
-        return {
-            "success": False,
-            "message": error,
-            "code": "INVALID_ACCOUNT",
-            "ask_user": error,
-            "requires_clarification": True,
-        }
-    account = normalized_account
+    # Validate account with fuzzy matching and ask for confirmation if needed
+    account_result = validate_account_with_confirmation(account)
+    if not account_result["success"]:
+        return account_result
+    
+    account = account_result["account"]
+    
+    # If account parsing was fuzzy-matched, ask for confirmation
+    if account_result.get("requires_confirmation"):
+        return account_result
 
     # Date - ask user if not provided (don't default to today)
     if not date:
@@ -228,21 +229,20 @@ def _execute_add_transaction(
             "message": "Tanggal transaksi harus diisi",
             "code": "MISSING_DATE",
             "ask_user": "Kapan transaksinya?\n"
-            "Format: YYYY-MM-DD (contoh: 2025-12-20)\n"
-            "atau tanggal lengkap (contoh: 20 Desember 2025)",
+            "Format: 'hari ini', 'kemarin', '20 desember', 'desember 2025', atau '2025-12-20'",
             "requires_clarification": True,
         }
 
-    # Validate date format
-    is_valid_date, normalized_date, date_error = validate_date(date)
-    if not is_valid_date:
-        return {
-            "success": False,
-            "message": date_error,
-            "code": "INVALID_DATE",
-            "ask_user": date_error,
-            "requires_clarification": True,
-        }
+    # Validate date with natural language and ask for confirmation if needed
+    date_result = validate_date_with_confirmation(date)
+    if not date_result["success"]:
+        return date_result
+    
+    normalized_date = date_result["date"]
+    
+    # If date parsing was natural language, ask for confirmation
+    if date_result.get("requires_confirmation"):
+        return date_result
 
     # Confirm large amount
     needs_confirm, confirm_msg = format_amount_confirmation(amount, "transaksi")
@@ -610,11 +610,11 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
                 "message": "Transaksi besar - perlu konfirmasi sebelum dihapus",
                 "code": "CONFIRM_DELETE",
                 "ask_user": f"Yakin ingin menghapus transaksi ini?\n\n"
-                           f"📅 Tanggal: {tx_data['date']}\n"
-                           f"💰 Jumlah: Rp {tx_data['amount']:,.0f}\n"
-                           f"🏷️  Tipe: {tx_data['type']}\n"
-                           f"📝 Deskripsi: {tx_data['description']}\n\n"
-                           f"Ketik 'hapus' untuk konfirmasi",
+                f"📅 Tanggal: {tx_data['date']}\n"
+                f"💰 Jumlah: Rp {tx_data['amount']:,.0f}\n"
+                f"🏷️  Tipe: {tx_data['type']}\n"
+                f"📝 Deskripsi: {tx_data['description']}\n\n"
+                f"Ketik 'hapus' untuk konfirmasi",
                 "requires_confirmation": True,
                 "transaction_preview": tx_data,
             }
@@ -712,29 +712,22 @@ def _execute_transfer_funds(user_id: int, args: Dict[str, Any]) -> Dict[str, Any
             "requires_clarification": True,
         }
 
-    # Validate accounts exist & normalize
-    is_valid_from, normalized_from, error_from = validate_account(from_account)
-    if not is_valid_from:
-        return {
-            "success": False,
-            "message": error_from,
-            "code": "INVALID_FROM_ACCOUNT",
-            "ask_user": error_from,
-            "requires_clarification": True,
-        }
-
-    is_valid_to, normalized_to, error_to = validate_account(to_account)
-    if not is_valid_to:
-        return {
-            "success": False,
-            "message": error_to,
-            "code": "INVALID_TO_ACCOUNT",
-            "ask_user": error_to,
-            "requires_clarification": True,
-        }
-
-    from_account = normalized_from
-    to_account = normalized_to
+    # Validate accounts exist & normalize with confirmation
+    from_result = validate_account_with_confirmation(from_account)
+    if not from_result["success"]:
+        return from_result
+    
+    from_account = from_result["account"]
+    if from_result.get("requires_confirmation"):
+        return from_result
+    
+    to_result = validate_account_with_confirmation(to_account)
+    if not to_result["success"]:
+        return to_result
+    
+    to_account = to_result["account"]
+    if to_result.get("requires_confirmation"):
+        return to_result
 
     # Check different accounts
     if from_account == to_account:
@@ -747,6 +740,7 @@ def _execute_transfer_funds(user_id: int, args: Dict[str, Any]) -> Dict[str, Any
         }
 
     # Check balance (prevent negative balance)
+    db = get_db()
     cur_balance = db.execute(
         """SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount 
                                     WHEN type='expense' THEN -amount 
@@ -761,8 +755,8 @@ def _execute_transfer_funds(user_id: int, args: Dict[str, Any]) -> Dict[str, Any
             "message": "Saldo tidak cukup",
             "code": "INSUFFICIENT_BALANCE",
             "ask_user": f"Saldo {from_account}: Rp {cur_balance:,.0f}\n"
-                       f"Tidak cukup untuk transfer Rp {amount:,.0f}\n"
-                       f"Kurang: Rp {amount - cur_balance:,.0f}",
+            f"Tidak cukup untuk transfer Rp {amount:,.0f}\n"
+            f"Kurang: Rp {amount - cur_balance:,.0f}",
             "requires_clarification": True,
             "available_balance": cur_balance,
             "required_amount": amount,
@@ -775,20 +769,18 @@ def _execute_transfer_funds(user_id: int, args: Dict[str, Any]) -> Dict[str, Any
             "success": False,
             "message": "Tanggal transfer harus diisi",
             "code": "MISSING_DATE",
-            "ask_user": "Kapan transfernya?\nFormat: YYYY-MM-DD atau tanggal lengkap",
+            "ask_user": "Kapan transfernya?\nFormat: 'hari ini', 'kemarin', '20 desember', atau '2025-12-20'",
             "requires_clarification": True,
         }
 
-    # Validate & parse date
-    is_valid_date, normalized_date, date_error = validate_date(date)
-    if not is_valid_date:
-        return {
-            "success": False,
-            "message": date_error,
-            "code": "INVALID_DATE",
-            "ask_user": date_error,
-            "requires_clarification": True,
-        }
+    # Validate & parse date with confirmation
+    date_result = validate_date_with_confirmation(date)
+    if not date_result["success"]:
+        return date_result
+    
+    normalized_date = date_result["date"]
+    if date_result.get("requires_confirmation"):
+        return date_result
 
     # Description: ask if not provided
     if not description:
