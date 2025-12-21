@@ -168,10 +168,10 @@ def _execute_add_transaction(
             # No explicit type provided, ask user
             return {
                 "success": False,
-                "message": "Tipe transaksi harus jelas",
+                "message": "Apa jenis transaksi ini?",
                 "code": "MISSING_TYPE",
-                "ask_user": "Apakah ini pemasukan (income) atau pengeluaran (expense)?\n"
-                "Contoh: 'Catat pemasukan 500k' atau 'Catat pengeluaran 50k'",
+                "ask_user": "Ini pemasukan atau pengeluaran?\n"
+                "Contoh: 'Terima gaji 5 juta' atau 'Bayar cicilan 500k'",
                 "requires_clarification": True,
             }
 
@@ -180,9 +180,9 @@ def _execute_add_transaction(
     if amount is None or amount <= 0:
         return {
             "success": False,
-            "message": "Jumlah transaksi tidak valid",
+            "message": "Berapa jumlahnya?",
             "code": "MISSING_AMOUNT",
-            "ask_user": "Berapa jumlahnya?\nContoh: '50 ribu', '500000', '1.5 juta'",
+            "ask_user": "Jumlahnya berapa?\nContoh: '50 ribu', '500 ribu', '1 juta'",
             "requires_clarification": True,
         }
 
@@ -197,11 +197,11 @@ def _execute_add_transaction(
         suggested = suggest_category(description, tx_type) if description else None
         return {
             "success": False,
-            "message": "Kategori transaksi harus diisi",
+            "message": "Kategori apa?",
             "code": "MISSING_CATEGORY",
-            "ask_user": f"Kategori apa untuk {tx_type} ini?\n"
+            "ask_user": f"Kategorinya apa?\n"
             f"Pilihan: {', '.join(VALID_CATEGORIES_BY_TYPE.get(tx_type, []))}"
-            + (f"\n(Saran: {suggested})" if suggested else ""),
+            + (f"\n🔍 Saran: {suggested}" if suggested else ""),
             "requires_clarification": True,
         }
 
@@ -209,17 +209,17 @@ def _execute_add_transaction(
     if not account:
         return {
             "success": False,
-            "message": "Akun transaksi harus diisi",
+            "message": "Akun mana?",
             "code": "MISSING_ACCOUNT",
-            "ask_user": "Akun mana yang digunakan?\n"
-            "Pilihan: Cash, BCA, Gopay, Maybank, Seabank, dan lainnya",
+            "ask_user": "Akun mana yang dipakai?\n"
+            "Misalnya: Cash, BCA, Gopay, Maybank, Seabank, OVO, dll",
             "requires_clarification": True,
         }
 
     # Interpret account with transparency - use input_interpreter
     interpreter = get_interpreter()
     account_interp = interpreter.interpret_account(account)
-    
+
     if account_interp.confidence == MatchConfidence.NO_MATCH:
         # No match found
         return {
@@ -229,16 +229,16 @@ def _execute_add_transaction(
             "ask_user": account_interp.explanation,
             "requires_clarification": True,
         }
-    
+
     # Extract normalized account
     account = account_interp.interpreted_value
-    
+
     # If fuzzy matched, ask for confirmation with explanation
     if account_interp.needs_confirmation:
         confirmation_msg = interpreter.format_confirmation_message(account_interp)
         return {
             "success": False,
-            "message": f"Konfirmasi akun: {account}",
+            "message": f"Jadi akun yang dipakai: {account}, benar?",
             "code": "CONFIRM_ACCOUNT",
             "ask_user": confirmation_msg,
             "requires_confirmation": True,
@@ -249,16 +249,16 @@ def _execute_add_transaction(
     if not date:
         return {
             "success": False,
-            "message": "Tanggal transaksi harus diisi",
+            "message": "Kapan tanggalnya?",
             "code": "MISSING_DATE",
-            "ask_user": "Kapan transaksinya?\n"
-            "Format: 'hari ini', 'kemarin', '20 desember', 'desember 2025', atau '2025-12-20'",
+            "ask_user": "Tanggalnya kapan?\n"
+            "Bisa 'hari ini', 'kemarin', 'besok', '20 desember', atau '2025-12-20'",
             "requires_clarification": True,
         }
 
     # Interpret date with transparency and confirmation
     date_interp = interpreter.interpret_date(date)
-    
+
     if date_interp.confidence == MatchConfidence.NO_MATCH:
         return {
             "success": False,
@@ -267,14 +267,14 @@ def _execute_add_transaction(
             "ask_user": date_interp.explanation,
             "requires_clarification": True,
         }
-    
+
     normalized_date = date_interp.interpreted_value
-    
+
     if date_interp.needs_confirmation:
         confirmation_msg = interpreter.format_confirmation_message(date_interp)
         return {
             "success": False,
-            "message": f"Konfirmasi tanggal: {normalized_date}",
+            "message": f"Tanggalnya: {normalized_date}, benar?",
             "code": "CONFIRM_DATE",
             "ask_user": confirmation_msg,
             "requires_confirmation": True,
@@ -303,7 +303,7 @@ def _execute_add_transaction(
             "success": False,
             "message": ve.message,
             "code": ve.code,
-            "ask_user": f"Mohon lengkapi: {ve.message}",
+            "ask_user": f"Coba lagi. {ve.message}",
             "requires_clarification": True,
         }
 
@@ -326,7 +326,7 @@ def _execute_add_transaction(
         db.commit()
         result = {
             "success": True,
-            "message": f"Transaksi {validated['type']} berhasil dicatat",
+            "message": f"✅ {validated['type'].capitalize()} Rp {validated['amount']:,.0f} dicatat ke {account}",
             "amount": validated["amount"],
             "category": validated["category"],
         }
@@ -334,7 +334,7 @@ def _execute_add_transaction(
         logger.error("transaction_insert_error", user_id=user_id, error=str(e))
         result = {
             "success": False,
-            "message": f"Gagal menyimpan transaksi: {str(e)}",
+            "message": f"Oops, ada masalah saat menyimpan. Coba lagi ya.",
             "code": "INSERT_ERROR",
         }
 
@@ -354,9 +354,9 @@ def _execute_create_savings_goal(user_id: int, args: Dict[str, Any]) -> Dict[str
     if not name:
         return {
             "success": False,
-            "message": "Nama target tabungan wajib diisi",
+            "message": "Target tabungan apa?",
             "code": "MISSING_NAME",
-            "ask_user": "Apa nama target tabungan Anda?\nContoh: Umroh, Liburan Bali, Dana Darurat, Laptop Baru",
+            "ask_user": "Nama targetnya apa?\nMisalnya: Umroh, Liburan Bali, Dana Darurat, Laptop Baru",
             "requires_clarification": True,
         }
 
@@ -377,9 +377,9 @@ def _execute_create_savings_goal(user_id: int, args: Dict[str, Any]) -> Dict[str
     if target_amount is None or target_amount <= 0:
         return {
             "success": False,
-            "message": "Target jumlah wajib diisi dan harus positif",
+            "message": "Target jumlahnya berapa?",
             "code": "MISSING_AMOUNT",
-            "ask_user": "Berapa target jumlahnya?\nContoh: '100 juta', '50000000', '1.5 miliar'",
+            "ask_user": "Targetnya berapa?\nMisalnya: '100 juta', '50000000', '1.5 miliar'",
             "requires_clarification": True,
         }
 
@@ -398,10 +398,10 @@ def _execute_create_savings_goal(user_id: int, args: Dict[str, Any]) -> Dict[str
     if not target_date:
         return {
             "success": False,
-            "message": "Target tanggal diperlukan",
+            "message": "Kapan targetnya?",
             "code": "MISSING_TARGET_DATE",
-            "ask_user": "Kapan ingin mencapai target ini?\n"
-            "Contoh: '2025-12-31', '31 Desember 2025', atau '2030' (tahun)",
+            "ask_user": "Target tanggalnya kapan?\n"
+            "Misalnya: '2025-12-31', '31 Desember 2025', atau '2030'",
             "requires_clarification": True,
         }
 
@@ -457,7 +457,7 @@ def _execute_create_savings_goal(user_id: int, args: Dict[str, Any]) -> Dict[str
 
         return {
             "success": True,
-            "message": f"✅ Target tabungan '{name}' berhasil dibuat",
+            "message": f"✨ Target tabungan '{name}' berhasil dibuat! Target Rp {target_amount:,.0f} sampai {date_display}",
             "details": {
                 "name": name,
                 "target_amount": target_amount,
@@ -477,7 +477,7 @@ def _execute_create_savings_goal(user_id: int, args: Dict[str, Any]) -> Dict[str
         )
         return {
             "success": False,
-            "message": f"Gagal membuat target tabungan: {str(e)}",
+            "message": f"Oops, ada masalah saat membuat target. Coba lagi ya.",
             "code": "GOAL_CREATION_FAILED",
         }
 
@@ -594,9 +594,9 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
     if not transaction_id:
         return {
             "success": False,
-            "message": "ID transaksi wajib diisi",
+            "message": "Transaksi ID berapa?",
             "code": "MISSING_ID",
-            "ask_user": "Transaksi mana yang ingin dihapus? (berikan ID transaksi)",
+            "ask_user": "Transaksi mana yang ingin dihapus? (berikan ID transaksinya)",
             "requires_clarification": True,
         }
 
@@ -625,7 +625,7 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
             )
             return {
                 "success": False,
-                "message": "Transaksi tidak ditemukan",
+                "message": "Transaksi tidak ketemu. Cek ID lagi?",
                 "code": "TRANSACTION_NOT_FOUND",
             }
 
@@ -633,9 +633,9 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
         if tx_data["amount"] > 5_000_000:
             return {
                 "success": False,
-                "message": "Transaksi besar - perlu konfirmasi sebelum dihapus",
+                "message": "Ini jumlah besar - yakin mau dihapus?",
                 "code": "CONFIRM_DELETE",
-                "ask_user": f"Yakin ingin menghapus transaksi ini?\n\n"
+                "ask_user": f"Yakin ingin hapus transaksi ini?\n\n"
                 f"📅 Tanggal: {tx_data['date']}\n"
                 f"💰 Jumlah: Rp {tx_data['amount']:,.0f}\n"
                 f"🏷️  Tipe: {tx_data['type']}\n"
@@ -655,7 +655,7 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
         if not deleted:
             return {
                 "success": False,
-                "message": "Gagal menghapus transaksi",
+                "message": "Oops, gagal menghapus. Coba lagi ya?",
                 "code": "DELETE_FAILED",
             }
 
@@ -669,7 +669,7 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
 
         return {
             "success": True,
-            "message": f"✅ Transaksi #{transaction_id} berhasil dihapus",
+            "message": f"✅ Transaksi #{transaction_id} terhapus",
             "transaction_id": transaction_id,
         }
 
@@ -683,7 +683,7 @@ def _execute_delete_transaction(user_id: int, args: Dict[str, Any]) -> Dict[str,
         )
         return {
             "success": False,
-            "message": f"Gagal menghapus transaksi: {str(e)}",
+            "message": f"Waduh, ada masalah. Coba lagi nanti ya.",
             "code": "DELETE_FAILED",
         }
 
