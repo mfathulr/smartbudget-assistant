@@ -2233,7 +2233,7 @@ def chat_api():
                     print(f"[DEBUG] Arguments: {sanitize_for_logging(fn_args)}")
                     print(f"{'=' * 60}\n")
 
-                    result = execute_action(user_id, fn_name, fn_args)
+                    result = execute_action(user_id, fn_name, fn_args, lang=lang)
                     results.append(result)
 
                     print(f"\n{'=' * 60}")
@@ -2468,7 +2468,7 @@ Action tersedia:
                     print(f"[DEBUG] GEMINI Arguments: {sanitize_for_logging(data_obj)}")
                     print(f"{'=' * 60}\n")
 
-                    res = execute_action(user_id, action, data_obj)
+                    res = execute_action(user_id, action, data_obj, lang=lang)
 
                     print(f"\n{'=' * 60}")
                     print(f"[DEBUG] GEMINI Tool Result: {res}")

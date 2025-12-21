@@ -25,6 +25,7 @@ from llm.input_interpreter import (
     get_interpreter,
     MatchConfidence,
 )
+from llm.interpreter_config import get_error_message, get_explanation, get_confirmation_message
 
 try:
     import dateparser
@@ -81,7 +82,7 @@ def _parse_amount(val: Optional[str]) -> Optional[float]:
 
 
 def execute_action(
-    user_id: int, action_name: str, args: Dict[str, Any]
+    user_id: int, action_name: str, args: Dict[str, Any], lang: str = "id"
 ) -> Dict[str, Any]:
     """
     Execute LLM action with proper error handling and validation.
@@ -90,10 +91,14 @@ def execute_action(
         user_id: User ID
         action_name: Action name (add_transaction, create_savings_goal, etc)
         args: Action arguments
+        lang: Language for response messages (id/en), default='id'
 
     Returns:
         Dict with success status and details
     """
+    # Ensure lang is valid
+    lang = lang if lang in ["id", "en"] else "id"
+    
     try:
         logger.info(
             "llm_action_started",
@@ -166,23 +171,26 @@ def _execute_add_transaction(
             tx_type = "income"
         else:
             # No explicit type provided, ask user
+            type_message = "Apa jenis transaksi ini?" if lang == "id" else "What type of transaction is this?"
+            type_ask = "Ini pemasukan atau pengeluaran?\nContoh: 'Terima gaji 5 juta' atau 'Bayar cicilan 500k'" if lang == "id" else "Is this income or expense?\nExample: 'Receive salary 5 million' or 'Pay installment 500k'"
             return {
                 "success": False,
-                "message": "Apa jenis transaksi ini?",
+                "message": type_message,
                 "code": "MISSING_TYPE",
-                "ask_user": "Ini pemasukan atau pengeluaran?\n"
-                "Contoh: 'Terima gaji 5 juta' atau 'Bayar cicilan 500k'",
+                "ask_user": type_ask,
                 "requires_clarification": True,
             }
 
     # Parse amount
     amount = _parse_amount(args.get("amount"))
     if amount is None or amount <= 0:
+        amount_message = "Berapa jumlahnya?" if lang == "id" else "What's the amount?"
+        amount_ask = "Jumlahnya berapa?\nContoh: '50 ribu', '500 ribu', '1 juta'" if lang == "id" else "What's the amount?\nExample: '50k', '500k', '1 million'"
         return {
             "success": False,
-            "message": "Berapa jumlahnya?",
+            "message": amount_message,
             "code": "MISSING_AMOUNT",
-            "ask_user": "Jumlahnya berapa?\nContoh: '50 ribu', '500 ribu', '1 juta'",
+            "ask_user": amount_ask,
             "requires_clarification": True,
         }
 
@@ -195,24 +203,27 @@ def _execute_add_transaction(
     # Category is required for income/expense
     if not category:
         suggested = suggest_category(description, tx_type) if description else None
+        category_message = "Kategori apa?" if lang == "id" else "What's the category?"
+        category_ask = f"Kategorinya apa?\nPilihan: {', '.join(VALID_CATEGORIES_BY_TYPE.get(tx_type, []))}" if lang == "id" else f"What's the category?\nOptions: {', '.join(VALID_CATEGORIES_BY_TYPE.get(tx_type, []))}"
+        if suggested:
+            category_ask += f"\n🔍 Saran: {suggested}" if lang == "id" else f"\n🔍 Suggestion: {suggested}"
         return {
             "success": False,
-            "message": "Kategori apa?",
+            "message": category_message,
             "code": "MISSING_CATEGORY",
-            "ask_user": f"Kategorinya apa?\n"
-            f"Pilihan: {', '.join(VALID_CATEGORIES_BY_TYPE.get(tx_type, []))}"
-            + (f"\n🔍 Saran: {suggested}" if suggested else ""),
+            "ask_user": category_ask,
             "requires_clarification": True,
         }
 
     # Account is required - ask if not provided
     if not account:
+        account_message = "Akun mana?" if lang == "id" else "Which account?"
+        account_ask = "Akun mana yang dipakai?\nMisalnya: Cash, BCA, Gopay, Maybank, Seabank, OVO, dll" if lang == "id" else "Which account are you using?\nExample: Cash, BCA, Gopay, Maybank, Seabank, OVO, etc"
         return {
             "success": False,
-            "message": "Akun mana?",
+            "message": account_message,
             "code": "MISSING_ACCOUNT",
-            "ask_user": "Akun mana yang dipakai?\n"
-            "Misalnya: Cash, BCA, Gopay, Maybank, Seabank, OVO, dll",
+            "ask_user": account_ask,
             "requires_clarification": True,
         }
 
@@ -236,9 +247,10 @@ def _execute_add_transaction(
     # If fuzzy matched, ask for confirmation with explanation
     if account_interp.needs_confirmation:
         confirmation_msg = interpreter.format_confirmation_message(account_interp)
+        confirm_message = f"Jadi akun yang dipakai: {account}, benar?" if lang == "id" else f"So the account used is: {account}, right?"
         return {
             "success": False,
-            "message": f"Jadi akun yang dipakai: {account}, benar?",
+            "message": confirm_message,
             "code": "CONFIRM_ACCOUNT",
             "ask_user": confirmation_msg,
             "requires_confirmation": True,
@@ -247,12 +259,13 @@ def _execute_add_transaction(
 
     # Date - ask user if not provided (don't default to today)
     if not date:
+        date_message = "Kapan tanggalnya?" if lang == "id" else "When is the date?"
+        date_ask = "Tanggalnya kapan?\nBisa 'hari ini', 'kemarin', 'besok', '20 desember', atau '2025-12-20'" if lang == "id" else "When is the date?\nCan be 'today', 'yesterday', 'tomorrow', 'Dec 20', or '2025-12-20'"
         return {
             "success": False,
-            "message": "Kapan tanggalnya?",
+            "message": date_message,
             "code": "MISSING_DATE",
-            "ask_user": "Tanggalnya kapan?\n"
-            "Bisa 'hari ini', 'kemarin', 'besok', '20 desember', atau '2025-12-20'",
+            "ask_user": date_ask,
             "requires_clarification": True,
         }
 
@@ -272,9 +285,10 @@ def _execute_add_transaction(
 
     if date_interp.needs_confirmation:
         confirmation_msg = interpreter.format_confirmation_message(date_interp)
+        date_confirm_message = f"Tanggalnya: {normalized_date}, benar?" if lang == "id" else f"The date is: {normalized_date}, right?"
         return {
             "success": False,
-            "message": f"Tanggalnya: {normalized_date}, benar?",
+            "message": date_confirm_message,
             "code": "CONFIRM_DATE",
             "ask_user": confirmation_msg,
             "requires_confirmation": True,
@@ -299,11 +313,12 @@ def _execute_add_transaction(
             field=ve.field,
             message=ve.message,
         )
+        error_prefix = "Coba lagi. " if lang == "id" else "Try again. "
         return {
             "success": False,
             "message": ve.message,
             "code": ve.code,
-            "ask_user": f"Coba lagi. {ve.message}",
+            "ask_user": f"{error_prefix}{ve.message}",
             "requires_clarification": True,
         }
 
@@ -324,9 +339,13 @@ def _execute_add_transaction(
             ),
         )
         db.commit()
+        type_label = validated['type'].capitalize()
+        if lang == "en":
+            type_label = "Income" if validated['type'] == "income" else "Expense"
+        success_message = f"✅ {type_label} Rp {validated['amount']:,.0f} dicatat ke {account}" if lang == "id" else f"✅ {type_label} Rp {validated['amount']:,.0f} recorded to {account}"
         result = {
             "success": True,
-            "message": f"✅ {validated['type'].capitalize()} Rp {validated['amount']:,.0f} dicatat ke {account}",
+            "message": success_message,
             "amount": validated["amount"],
             "category": validated["category"],
         }
