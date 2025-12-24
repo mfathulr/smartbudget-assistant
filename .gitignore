@@ -126,6 +126,7 @@ desktop.ini
 # Allow README and critical documentation
 !README.md
 !.gitkeep
+!.github/**/*.md
 # Also ignore other doc formats
 *.rst
 docs/

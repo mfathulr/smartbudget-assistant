@@ -97,7 +97,7 @@ CONFIRMATION_TEMPLATES = {
         "date": "The date is **{value}**, yes?",
         "category": "The category is **{value}**, agree?",
         "default": "Your {field_type} is **{value}**, right?",
-    }
+    },
 }
 
 # =============================================================================
@@ -159,7 +159,7 @@ CONFIRMATION_RESPONSE_TEMPLATES = {
         "confirmed": "✅ Great! {field_type.title()} {value} confirmed. Let's go!",
         "rejected": "Okay, won't use '{value}'.\nTell me the correct {field_type}!",
         "rejected_ask": "Provide the correct {field_type} for {field_name}",
-    }
+    },
 }
 
 # =============================================================================
@@ -189,7 +189,7 @@ ERROR_MESSAGE_TEMPLATES = {
         "category_message": "Specify the transaction category. It helps me track your spending!",
         "amount_bounds": "Does the amount make sense? 🤔",
         "amount_bounds_ask": "Amount must be positive and max 1 billion. Try again!",
-    }
+    },
 }
 
 # =============================================================================
@@ -215,7 +215,9 @@ def is_confirmation_no(response: str) -> bool:
 def get_confirmation_message(field_type: str, value: str, lang: str = "id") -> str:
     """Get confirmation message for a field type"""
     lang = lang if lang in CONFIRMATION_TEMPLATES else "id"
-    template = CONFIRMATION_TEMPLATES[lang].get(field_type, CONFIRMATION_TEMPLATES[lang]["default"])
+    template = CONFIRMATION_TEMPLATES[lang].get(
+        field_type, CONFIRMATION_TEMPLATES[lang]["default"]
+    )
     if "{field_type" in template:
         return template.format(field_type=field_type, value=value)
     return template.format(value=value)

@@ -13,6 +13,8 @@ except Exception:
 from flask import Flask, request, jsonify, send_from_directory, g
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from openai import OpenAI
 import requests as http_requests
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -34,11 +36,18 @@ from config import (
 )
 from database import get_db, close_db, init_db
 from financial_context import get_month_summary, build_financial_context
-from llm import execute_action, TOOLS_DEFINITIONS
+from llm import (
+    execute_action,
+    TOOLS_DEFINITIONS,
+    detect_intent,
+    get_system_prompt,
+    call_llm_with_retry,
+)
 from memory import build_memory_context, log_message, maybe_update_summary
 from routes.memory_routes import memory_bp
 from core import get_logger
 from services import ConversationStateManager
+from llm import validate_action_arguments
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 logger = get_logger(__name__)
@@ -163,6 +172,14 @@ app.config.update(FLASK_CONFIG)
 db_sqlalchemy = SQLAlchemy(app)
 migrate = Migrate(app, db_sqlalchemy)
 app.teardown_appcontext(close_db)
+
+# Initialize rate limiter (per IP)
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",  # Use memory for now (can switch to Redis for production)
+)
 
 # Register blueprints
 app.register_blueprint(memory_bp)
@@ -1986,6 +2003,7 @@ def transfer_to_savings_api():
 # === LLM CHAT ROUTE ===
 @app.route("/api/chat", methods=["POST"])
 @require_login
+@limiter.limit("20 per hour")  # 20 messages per hour per IP
 def chat_api():
     user_id = g.user["id"]
     # Use WIB date for prompts
@@ -2111,32 +2129,15 @@ def chat_api():
     wib = timezone(timedelta(hours=7))
     time_str = datetime.now(wib).strftime("%H:%M WIB, %A, %d %B %Y")
 
-    if lang == "en":
-        base_prompt = (
-            f"You are FIN, a concise finance assistant for {user_name}. "
-            f"Current time: {time_str}. After executing tools, output status lines (✓ Success/✗ Failed) before explanation. "
-            f"CRITICAL RULES:\n"
-            f"1. For INCOME: 'category' is REQUIRED (e.g., Salary, Bonus, Sales). ASK if not specified.\n"
-            f"2. For EXPENSE: 'category' is required. ASK if unclear.\n"
-            f"3. For TRANSFER: Both 'from_account' and 'to_account' are required. ASK if not specified.\n"
-            f"4. For SAVINGS GOAL: 'name' and 'target_amount' are required. ASK if missing.\n"
-            f"5. ALWAYS ask for missing information BEFORE executing any database action.\n"
-            f"6. NEVER use auto-detected values for critical fields - always confirm with user first."
-        )
-        user_prompt = f"Today: {today.isoformat()}\nContext:\n{ctx}\n\nMemory:\n{mem_ctx}\n\nUser: {user_message}"
-    else:
-        base_prompt = (
-            f"Kamu FIN, asisten keuangan ringkas untuk {user_name}. "
-            f"Waktu: {time_str}. Setelah eksekusi tool tampilkan baris status (✓ Berhasil/✗ Gagal) sebelum penjelasan. "
-            f"ATURAN KRITIS:\n"
-            f"1. Untuk PEMASUKAN: 'category' WAJIB jelas (contoh: Gaji, Bonus, Penjualan). TANYA jika tidak disebutkan.\n"
-            f"2. Untuk PENGELUARAN: 'category' wajib ada. TANYA jika tidak jelas.\n"
-            f"3. Untuk TRANSFER: 'from_account' dan 'to_account' wajib. TANYA jika tidak disebutkan.\n"
-            f"4. Untuk TARGET TABUNGAN: 'name' dan 'target_amount' wajib. TANYA jika tidak ada.\n"
-            f"5. SELALU tanya informasi yang kurang SEBELUM eksekusi aksi database.\n"
-            f"6. JANGAN gunakan nilai auto-detected untuk field kritis - selalu konfirmasi dengan user dulu."
-        )
-        user_prompt = f"Tanggal: {today.isoformat()}\nKonteks:\n{ctx}\n\nMemori:\n{mem_ctx}\n\nUser: {user_message}"
+    # Detect intent and use appropriate prompt to save tokens
+    intent = detect_intent(user_message)
+    base_prompt = get_system_prompt(intent, lang, user_name, time_str)
+
+    user_prompt = (
+        f"Today: {today.isoformat()}\nContext:\n{ctx}\n\nMemory:\n{mem_ctx}\n\nUser: {user_message}"
+        if lang == "en"
+        else f"Tanggal: {today.isoformat()}\nKonteks:\n{ctx}\n\nMemori:\n{mem_ctx}\n\nUser: {user_message}"
+    )
 
     # === CONVERSATION STATE MANAGEMENT ===
     # Check if there's an active multi-turn conversation state for this session
@@ -2179,7 +2180,9 @@ def chat_api():
             else:
                 user_content = user_prompt
 
-            resp = client.chat.completions.create(
+            # Call OpenAI with retry logic (max 3 retries with exponential backoff)
+            resp = call_llm_with_retry(
+                client.chat.completions.create,
                 model=model_id,
                 messages=[
                     {"role": "system", "content": base_prompt},
@@ -2187,7 +2190,19 @@ def chat_api():
                 ],
                 tools=TOOLS_DEFINITIONS,
                 tool_choice="auto",
+                max_retries=3,
+                initial_delay=1.0,
             )
+
+            if resp is None:
+                # All retries failed
+                error_msg = (
+                    "Maaf, sedang ada gangguan koneksi ke AI. Coba lagi sebentar ya!"
+                    if lang == "id"
+                    else "Sorry, there's a connection issue with AI. Please try again in a moment!"
+                )
+                return jsonify({"reply": error_msg, "session_id": session_id}), 503
+
             msg = resp.choices[0].message
 
             if msg.tool_calls:
@@ -2233,7 +2248,31 @@ def chat_api():
                     print(f"[DEBUG] Arguments: {sanitize_for_logging(fn_args)}")
                     print(f"{'=' * 60}\n")
 
-                    result = execute_action(user_id, fn_name, fn_args, lang=lang)
+                    # Validate LLM arguments before execution
+                    is_valid, validation_result = validate_action_arguments(
+                        fn_name, fn_args
+                    )
+                    if not is_valid:
+                        # Validation failed
+                        error_msg = (
+                            f"Invalid arguments for {fn_name}: {validation_result}"
+                        )
+                        logger.warning(
+                            "llm_argument_validation_failed",
+                            action=fn_name,
+                            errors=validation_result,
+                        )
+                        result = {
+                            "success": False,
+                            "message": f"Argumen tidak valid: {', '.join([e.get('msg', 'Unknown error') for e in validation_result])}",
+                            "code": "INVALID_ARGUMENTS",
+                        }
+                    else:
+                        # Validation passed - execute with validated arguments
+                        result = execute_action(
+                            user_id, fn_name, validation_result, lang=lang
+                        )
+
                     results.append(result)
 
                     print(f"\n{'=' * 60}")
@@ -2340,21 +2379,23 @@ def chat_api():
                     maybe_update_summary(user_id)
                     return jsonify({"answer": summary, "session_id": session_id}), 200
 
-                # All good G�� add a brief explanation
+                # All successful - ask LLM to explain results naturally without status lines
                 explain_prompt = (
-                    "Ringkas hasil (maks 5 kalimat) tanpa ubah simbol."
+                    "Jelaskan hasil aksi finansial ini dengan singkat (maks 5 kalimat) dan friendly. Jangan sertakan simbol status (✓/✗)."
                     if lang != "en"
-                    else "Summarize results (max 5 sentences) keep symbols."
+                    else "Explain the results of this financial action concisely (max 5 sentences) in a friendly way. Do not include status symbols (✓/✗)."
                 )
                 follow = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": base_prompt},
-                        {"role": "assistant", "content": summary},
                         {"role": "user", "content": explain_prompt},
                     ],
                 )
-                answer = summary + "\n\n" + follow.choices[0].message.content.strip()
+                # Only add status summary if there's actual information to show
+                explanation = follow.choices[0].message.content.strip()
+                # For truly successful actions, show status once then explain
+                answer = summary + "\n\n" + explanation if explanation else summary
                 log_message(user_id, "assistant", answer, session_id=session_id)
                 maybe_update_summary(user_id)
                 return jsonify({"answer": answer, "session_id": session_id}), 200
@@ -2440,26 +2481,47 @@ Action tersedia:
                 image_bytes = base64.b64decode(image_data)
                 image = PIL.Image.open(io.BytesIO(image_bytes))
 
-                # For Gemini vision
-                content_parts = [prompt, image]
-                resp = current_gemini_model.generate_content(
-                    content_parts, safety_settings=safety, stream=False
+                # For Gemini vision with retry
+                resp = call_llm_with_retry(
+                    current_gemini_model.generate_content,
+                    [prompt, image],
+                    safety_settings=safety,
+                    stream=False,
+                    max_retries=3,
+                    initial_delay=1.0,
                 )
             else:
-                resp = current_gemini_model.generate_content(
-                    prompt, safety_settings=safety, stream=False
+                resp = call_llm_with_retry(
+                    current_gemini_model.generate_content,
+                    prompt,
+                    safety_settings=safety,
+                    stream=False,
+                    max_retries=3,
+                    initial_delay=1.0,
                 )
+
+            if resp is None:
+                # All retries failed
+                error_msg = (
+                    "Maaf, sedang ada gangguan koneksi ke AI. Coba lagi sebentar ya!"
+                    if lang == "id"
+                    else "Sorry, there's a connection issue with AI. Please try again in a moment!"
+                )
+                return jsonify({"reply": error_msg, "session_id": session_id}), 503
+
             text = resp.text
 
-            jm = re.search(r"```json\s*({.*%s})\s*```", text, re.DOTALL)
+            # Fixed regex to properly extract JSON from code block
+            jm = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
             if jm:
                 try:
+                    json_str = jm.group(1).strip()
                     print(f"\n{'=' * 60}")
                     print("[DEBUG] GEMINI: JSON action block ditemukan!")
-                    print(f"[DEBUG] JSON content: {jm.group(1)}")
+                    print(f"[DEBUG] JSON content: {json_str}")
                     print(f"{'=' * 60}\n")
 
-                    obj = json.loads(jm.group(1))
+                    obj = json.loads(json_str)
                     action = obj.get("action")
                     data_obj = obj.get("data", {})
 
@@ -2468,7 +2530,27 @@ Action tersedia:
                     print(f"[DEBUG] GEMINI Arguments: {sanitize_for_logging(data_obj)}")
                     print(f"{'=' * 60}\n")
 
-                    res = execute_action(user_id, action, data_obj, lang=lang)
+                    # Validate LLM arguments before execution
+                    is_valid, validation_result = validate_action_arguments(
+                        action, data_obj
+                    )
+                    if not is_valid:
+                        # Validation failed
+                        logger.warning(
+                            "gemini_argument_validation_failed",
+                            action=action,
+                            errors=validation_result,
+                        )
+                        res = {
+                            "success": False,
+                            "message": f"Argumen tidak valid: {', '.join([e.get('msg', 'Unknown error') for e in validation_result])}",
+                            "code": "INVALID_ARGUMENTS",
+                        }
+                    else:
+                        # Validation passed - execute with validated arguments
+                        res = execute_action(
+                            user_id, action, validation_result, lang=lang
+                        )
 
                     print(f"\n{'=' * 60}")
                     print(f"[DEBUG] GEMINI Tool Result: {res}")
@@ -2524,10 +2606,21 @@ Action tersedia:
                             {"answer": answer, "session_id": session_id}
                         ), 200
 
-                    # Success: include concise remaining text as explanation
+                    # Success: Let LLM explain naturally without forcing status prefix
+                    # Extract just the explanation part without JSON
+                    explanation = (
+                        remaining
+                        if remaining
+                        else "Berhasil!"
+                        if lang != "en"
+                        else "Done!"
+                    )
                     answer = prefix + " " + res["message"]
-                    if remaining:
-                        answer += "\n\n" + remaining
+                    if explanation and explanation.lower() not in [
+                        "berhasil!",
+                        "done!",
+                    ]:
+                        answer += "\n\n" + explanation
                     log_message(user_id, "assistant", answer, session_id=session_id)
                     maybe_update_summary(user_id)
                     return jsonify({"answer": answer, "session_id": session_id}), 200

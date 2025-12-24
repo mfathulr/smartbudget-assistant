@@ -11,13 +11,13 @@ from datetime import datetime, timedelta
 from difflib import get_close_matches
 import re
 
-from validation_utils import (
+from .validation_utils import (
     parse_natural_date,
     COMMON_ACCOUNT_ALIASES,
     VALID_ACCOUNTS,
     VALID_CATEGORIES_BY_TYPE,
 )
-from interpreter_config import (
+from .interpreter_config import (
     FUZZY_MATCHING_THRESHOLDS,
     get_natural_date_terms,
     CONFIRMATION_TEMPLATES,

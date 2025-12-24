@@ -1,5 +1,6 @@
 ﻿"""Helper functions for financial operations"""
 
+from functools import lru_cache
 from database import get_db
 
 
@@ -55,8 +56,9 @@ def get_month_summary(user_id, year, month):
     }
 
 
-def build_financial_context(user_id, year, month):
-    """Build context string with user's financial data for LLM"""
+@lru_cache(maxsize=128)
+def _cached_financial_context(user_id, year, month):
+    """Internal cached function - DO NOT call directly"""
     _validate_year_month(user_id, year, month)
     db = get_db()
     summary = get_month_summary(user_id, year, month)
@@ -98,3 +100,13 @@ def build_financial_context(user_id, year, month):
     tx_text = "\n".join(tx_lines)
 
     return f"{summary_text}\nRecent transactions (latest first):\n{tx_text}\n"
+
+
+def build_financial_context(user_id, year, month):
+    """Build context string with user's financial data for LLM (with caching)"""
+    return _cached_financial_context(user_id, year, month)
+
+
+def invalidate_financial_cache():
+    """Invalidate financial context cache after transaction changes"""
+    _cached_financial_context.cache_clear()
