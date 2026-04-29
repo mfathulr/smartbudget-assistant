@@ -15,7 +15,7 @@ echo "✅ Database initialized"
 
 # Create admin user if not exists
 echo "👤 Creating admin user..."
-python init_admin.py || echo "⚠️ Admin user already exists or failed to create"
+python migrations/init_admin.py || echo "⚠️ Admin user already exists or failed to create"
 
 # Start Flask server with Gunicorn (production-ready)
 echo "✅ Starting Flask server with Gunicorn..."
